@@ -1,0 +1,131 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "backtest-engine"
+version = "0.1.0"
+description = "Research-first backtesting engine: VectorBT -> Backtrader -> NautilusTrader. Open source only."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Alex P" }]
+dependencies = [
+  # Core
+  "numpy>=1.26",
+  "pandas>=2.1",
+  "pyarrow>=14.0",
+  "pydantic>=2.5",
+  # Phase 1 - Discovery
+  "vectorbt>=0.26",
+  "numba>=0.59",
+  # Phase 2 - Validation
+  "backtrader>=1.9.78",
+  # Phase 3 - Execution parity (declared for v2; import lazily)
+  "nautilus_trader>=1.200",
+  # Data
+  "yfinance>=0.2.40",
+  "requests>=2.31",
+  "alpaca-py>=0.20",
+  "pandas-ta>=0.3.14b0",
+  # Validation / stats
+  "scipy>=1.11",
+  "statsmodels>=0.14",
+  "scikit-learn>=1.3",
+  # Reporting
+  "quantstats>=0.0.62",
+  "plotly>=5.18",
+  "matplotlib>=3.8",
+  # Engineering
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "pytest-xdist>=3.5",
+  "hypothesis>=6.100",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "types-requests>=2.31",
+  "pre-commit>=3.6",
+]
+
+[project.scripts]
+bte = "backtest_engine.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/backtest_engine"]
+
+# ---------------------------------------------------------------------------
+# Ruff: lint + format (replaces black/flake8/isort)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "C4", "SIM", "W", "PIE"]
+ignore = ["E501"]  # line-length handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+"src/backtest_engine/strategy/adapters/*" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+packages = ["backtest_engine"]
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = false
+no_implicit_optional = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+  "vectorbt.*", "backtrader.*", "nautilus_trader.*",
+  "yfinance.*", "alpaca.*", "alpaca_py.*", "pandas_ta.*", "quantstats.*",
+  "plotly.*", "matplotlib.*", "numba.*", "statsmodels.*",
+  "yfinance.*",
+]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config -q"
+markers = [
+  "smoke: end-to-end smoke tests",
+  "slow: long-running tests (walk-forward, MC)",
+]
+filterwarnings = [
+  "ignore::DeprecationWarning:vectorbt.*",
+  "ignore::DeprecationWarning:backtrader.*",
+  "ignore::DeprecationWarning:yfinance.*",
+  "ignore::FutureWarning:pandas.*",
+]
+
+[tool.coverage.run]
+source = ["src/backtest_engine"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
+]

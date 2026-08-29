@@ -1,0 +1,40 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Runtime output and local state
+logs/
+outputs/*
+!outputs/.gitkeep
+data/raw/
+data/clean/
+*.log
+*_state.json
+*_portfolio.json
+open_positions.json
+reflection_log.json
+debate_scores.json
+trades.csv
+daily_pnl.csv
+performance_log.csv
+
+# Generated research reports
+scion_report_*.md
+buffett_report_*.md
+screener_output.md
+
+# Local/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -2,15 +2,14 @@
 
 Commands shipped in v1 (M2/M4/M7/M8):
   - `bte settings`    - print resolved settings
-  - `bte discover`    - run a Phase 1 (vectorized) sweep or single backtest on synth data
-  - `bte validate`   - run a Phase 2 (Backtrader) backtest on synth data
+  - `bte discover`    - run a Phase 1 (vectorized) backtest on persisted clean data
+  - `bte validate`   - run a Phase 2 (Backtrader) backtest on persisted clean data
   - `bte report`      - generate a QuantStats-style tearsheet for the latest run
   - `bte list-strats` - list built-in strategies
 
-The CLI in v1 deliberately uses synthetic data so the whole pipeline runs
-end-to-end without network/data-fetch setup. The data layer (M1) supports
-real ingestion; CLI integration with yfinance/warchest data is the next-step
-follow-up (see plan M9).
+The CLI reads persisted clean data by default. Synthetic data is available only
+when `--synthetic` is passed, keeping offline demos explicit and preventing a
+missing real dataset from silently changing the backtest.
 """
 
 from __future__ import annotations
@@ -20,11 +19,13 @@ import json
 import sys
 import uuid
 from collections.abc import Sequence
+from pathlib import Path
 
 import pandas as pd
 
 from backtest_engine import __version__
 from backtest_engine.config import resolve_settings
+from backtest_engine.data.store import read_clean
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
 from backtest_engine.metrics.tearsheet import make_report_config, render_report
 from backtest_engine.pipeline.discovery import run_spec
@@ -56,6 +57,35 @@ def _synthetic_ohlc(symbol: str = "SYNTH", days: int = 252 * 3, seed: int = 42) 
     return out
 
 
+def _clean_ohlc(
+    symbol: str,
+    *,
+    data_root: Path,
+    start: str | None,
+    end: str | None,
+) -> pd.DataFrame:
+    """Load one symbol from the configured persisted clean-data root."""
+    clean_root = data_root / "clean"
+    clean = read_clean(clean_root, symbol, start=start, end=end)
+    if clean.empty:
+        raise ValueError(
+            f"No clean data for symbol {symbol.upper()} under {clean_root}. "
+            "Ingest the symbol first or pass --synthetic for an explicit demo."
+        )
+
+    required = ("timestamp", "open", "high", "low", "close", "volume")
+    missing = [column for column in required if column not in clean.columns]
+    if missing:
+        raise ValueError(
+            f"Clean data for {symbol.upper()} is missing required columns: {', '.join(missing)}"
+        )
+    ohlc = clean.set_index("timestamp")[list(required[1:])].sort_index()
+    if len(ohlc) < 2:
+        raise ValueError(f"Clean data for {symbol.upper()} must contain at least two rows")
+    ohlc.attrs["symbol"] = symbol.upper()
+    return ohlc
+
+
 # --- argument parsers ------------------------------------------------------
 
 
@@ -76,6 +106,7 @@ def _build_parser() -> argparse.ArgumentParser:
     d.add_argument("--days", type=int, default=252 * 3)
     d.add_argument("--seed", type=int, default=42)
     d.add_argument("--engine", default="vectorbt", choices=("vectorbt", "backtrader"))
+    _add_data_options(d)
 
     v = sub.add_parser(
         "validate", help="Phase 2 - Backtrader validation (single run on synth data)"
@@ -85,6 +116,7 @@ def _build_parser() -> argparse.ArgumentParser:
     v.add_argument("--capital", type=float, default=100_000)
     v.add_argument("--days", type=int, default=252 * 3)
     v.add_argument("--seed", type=int, default=42)
+    _add_data_options(v)
 
     r = sub.add_parser("report", help="Generate a QuantStats-style tearsheet for a run")
     r.add_argument("--run-id", required=True, help="Run id (e.g. returned by discover/validate)")
@@ -93,6 +125,27 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("replay", help="Phase 3 - NautilusTrader replay (M9; not yet implemented)")
 
     return p
+
+
+def _add_data_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--symbol", default="SPY", help="Ticker in the persisted clean dataset")
+    parser.add_argument("--start", help="Inclusive start date for persisted data (YYYY-MM-DD)")
+    parser.add_argument("--end", help="Inclusive end date for persisted data (YYYY-MM-DD)")
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        help="Data root containing clean/<SYMBOL>/<YEAR>.parquet (default: data)",
+    )
+    parser.add_argument(
+        "--universe-root",
+        type=Path,
+        help="Configured universe metadata root (default: data/universe)",
+    )
+    parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Use deterministic synthetic bars instead of persisted clean data",
+    )
 
 
 # --- main ----------------------------------------------------------------
@@ -132,13 +185,32 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         universe_ref="synth",
         params=default_params,
     )
-    ohlc = _synthetic_ohlc(days=args.days, seed=args.seed)
+    settings = resolve_settings()
+    if args.synthetic:
+        ohlc = _synthetic_ohlc(symbol=args.symbol, days=args.days, seed=args.seed)
+        source_label = "synthetic"
+    else:
+        data_root = args.data_root or settings.data_dir
+        try:
+            ohlc = _clean_ohlc(
+                args.symbol,
+                data_root=data_root,
+                start=args.start,
+                end=args.end,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        universe_root = args.universe_root or settings.universe_dir
+        spec.universe_ref = str(universe_root)
+        source_label = str(data_root / "clean")
     engine = "backtrader" if args.cmd == "validate" else args.engine
     run_id = f"bte-{args.cmd}-{uuid.uuid4().hex[:8]}"
     res = run_spec(spec, ohlc, engine=engine, run_id=run_id)
     print(f"Run id: {res.run_id}")
     print(f"Engine: {res.engine}")
     print(f"Strategy: {res.strategy_name}")
+    print(f"Data: {ohlc.attrs.get('symbol', args.symbol).upper()} ({source_label})")
     print(f"Params: {res.params}")
     metrics = attach_metric_panel(res)
     print(

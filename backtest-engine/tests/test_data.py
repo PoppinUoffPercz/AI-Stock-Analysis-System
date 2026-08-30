@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -203,6 +204,85 @@ def test_yfinance_source_normalize_yields_canonical_columns(monkeypatch):
     ]
     # adj prices equal raw when no corp actions take place
     assert ((out["adj_close"] - out["close"]).abs() < 1e-9).all()
+
+
+def _yfinance_frame(
+    close: list[float],
+    *,
+    dividends: list[float] | None = None,
+    splits: list[float] | None = None,
+    adj_close: list[float] | None = None,
+) -> pd.DataFrame:
+    n = len(close)
+    idx = pd.date_range("2024-01-01", periods=n, tz="UTC")
+    return pd.DataFrame(
+        {
+            "Open": close,
+            "High": [p + 1.0 for p in close],
+            "Low": [p - 1.0 for p in close],
+            "Close": close,
+            "Adj Close": adj_close if adj_close is not None else close,
+            "Volume": [1_000.0] * n,
+            "Dividends": dividends if dividends is not None else [0.0] * n,
+            "Stock Splits": splits if splits is not None else [0.0] * n,
+        },
+        index=idx,
+    )
+
+
+def test_yfinance_normalize_zero_splits_are_finite():
+    out = YFinanceSource._normalize(_yfinance_frame([100.0, 101.0, 102.0]))
+
+    assert (out["split_ratio"] == 1.0).all()
+    assert np.isfinite(out[["adj_open", "adj_high", "adj_low", "adj_close"]]).all().all()
+    assert (out["adj_close"] == out["close"]).all()
+
+
+def test_yfinance_normalize_split_uses_adjusted_close_factor():
+    out = YFinanceSource._normalize(
+        _yfinance_frame([100.0, 50.0, 52.0], splits=[0.0, 2.0, 0.0], adj_close=[50.0, 50.0, 52.0])
+    )
+
+    assert out["adj_close"].tolist() == [50.0, 50.0, 52.0]
+    assert out["open"].tolist() == [100.0, 50.0, 52.0]
+    assert out["adj_open"].tolist() == [50.0, 50.0, 52.0]
+
+
+def test_yfinance_normalize_dividend_uses_adjusted_close_factor():
+    out = YFinanceSource._normalize(
+        _yfinance_frame(
+            [100.0, 98.0, 99.0], dividends=[0.0, 2.0, 0.0], adj_close=[98.0, 98.0, 99.0]
+        )
+    )
+
+    assert out["adj_close"].tolist() == [98.0, 98.0, 99.0]
+    assert out["close"].tolist() == [100.0, 98.0, 99.0]
+
+
+def test_yfinance_normalize_invalid_adjusted_close_falls_back_to_raw():
+    out = YFinanceSource._normalize(
+        _yfinance_frame([100.0, 101.0, 102.0], adj_close=[np.nan, 0.0, 102.0])
+    )
+
+    assert np.isfinite(out[["adj_open", "adj_high", "adj_low", "adj_close"]]).all().all()
+    assert out["adj_close"].tolist() == [100.0, 101.0, 102.0]
+
+
+def test_validate_clean_accepts_normalized_yfinance_no_action_rows():
+    normalized = YFinanceSource._normalize(_yfinance_frame([100.0, 101.0, 102.0]))
+
+    cleaned = validate_clean(normalized, source="yfinance")
+
+    assert (cleaned["split_ratio"] == 1.0).all()
+    assert np.isfinite(cleaned["adj_close"]).all()
+
+
+def test_validate_clean_rejects_nonfinite_adjusted_ohlc():
+    raw = _raw_frame()
+    raw.loc[0, "adj_close"] = np.inf
+
+    with pytest.raises(CleanError, match="adjusted OHLC"):
+        validate_clean(raw, source="test")
 
 
 # ---------------------------------------------------------------------------

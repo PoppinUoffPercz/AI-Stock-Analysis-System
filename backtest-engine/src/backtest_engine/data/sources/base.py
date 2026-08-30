@@ -19,6 +19,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Final
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -113,6 +114,7 @@ class YFinanceSource(Source):
             "High": "high",
             "Low": "low",
             "Close": "close",
+            "Adj Close": "source_adj_close",
             "Volume": "volume",
             "Date": "timestamp",
             "Dividends": "dividend",
@@ -127,27 +129,46 @@ class YFinanceSource(Source):
         if "volume" not in df.columns:
             df["volume"] = 0.0
 
-        # Compute back-adjusted OHLC via cumulative adjustment factor.
-        # For a position-holding backtest on US daily equities, we default to the
-        # back-adjusted series for signals to prevent future corp-action look-ahead.
-        # Build cumulative adj factor using split_ratio and dividend yield.
-        ratio = df["split_ratio"].astype(float)
-        adj_factor = (1.0 / ratio).cumprod().shift(1, fill_value=1.0)
+        df["split_ratio"] = pd.to_numeric(df["split_ratio"], errors="coerce").fillna(1.0)
+        df.loc[df["split_ratio"] == 0, "split_ratio"] = 1.0
+        df["dividend"] = pd.to_numeric(df["dividend"], errors="coerce").fillna(0.0)
 
-        # dividend back-adjustment (multiplicative close): r_t = 1 - div/close_t-1
-        # For simplicity and predictability we use additive dividend on close.
-        # This matches yfinance's default Adjusted Close convention (close adjusted
-        # for both splits and dividends).
-        close_for_div = df["close"].where(df["close"] > 0, pd.NA)
-        # dividend-divisor at time t applies to all bars at and before t.
-        div_ratio = (df["close"] - df["dividend"]) / close_for_div
-        div_ratio = div_ratio.fillna(1.0).cumprod()
-        adj_factor = adj_factor * div_ratio
+        # yfinance's adjusted close already contains the correct backward
+        # corporate-action factor for each row. Use it for every OHLC field.
+        close = pd.to_numeric(df["close"], errors="coerce")
+        source_adj_close = (
+            pd.to_numeric(df["source_adj_close"], errors="coerce")
+            if "source_adj_close" in df.columns
+            else pd.Series(np.nan, index=df.index)
+        )
+        adj_factor = source_adj_close / close
+        valid_factor = (
+            source_adj_close.notna()
+            & close.notna()
+            & close.ne(0)
+            & np.isfinite(source_adj_close)
+            & np.isfinite(adj_factor)
+            & adj_factor.gt(0)
+        )
 
-        df["adj_open"] = df["open"] * adj_factor
-        df["adj_high"] = df["high"] * adj_factor
-        df["adj_low"] = df["low"] * adj_factor
-        df["adj_close"] = df["close"] * adj_factor
+        # Fallback for missing/invalid adjusted-close values. An action on row
+        # T adjusts rows strictly before T, so walk actions backward in time.
+        fallback = pd.Series(1.0, index=df.index, dtype="float64")
+        future_factor = 1.0
+        for i in range(len(df) - 1, -1, -1):
+            fallback.iloc[i] = future_factor
+            ratio = float(df["split_ratio"].iloc[i])
+            div = float(df["dividend"].iloc[i])
+            close_i = float(close.iloc[i])
+            if np.isfinite(ratio) and ratio > 0:
+                future_factor /= ratio
+            if np.isfinite(div) and 0 < div < close_i:
+                future_factor *= (close_i - div) / close_i
+
+        adj_factor = adj_factor.where(valid_factor, fallback)
+        adj_factor = adj_factor.where(np.isfinite(adj_factor) & adj_factor.gt(0), 1.0)
+        for raw in ("open", "high", "low", "close"):
+            df[f"adj_{raw}"] = pd.to_numeric(df[raw], errors="coerce") * adj_factor
 
         cols = [c for c in RAW_FILE_COLUMNS if c in df.columns]
         out = df[cols]

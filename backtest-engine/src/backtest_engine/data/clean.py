@@ -8,6 +8,7 @@ and adj columns next to corp-action facts so look-ahead audit is possible.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from backtest_engine.data.store import CLEAN_COLUMNS, TIMESTAMP_TZ
@@ -72,6 +73,11 @@ def validate_clean(df: pd.DataFrame, *, source: str) -> pd.DataFrame:
     ohlc = d[["open", "high", "low", "close"]]
     if ohlc.isna().any().any():
         raise CleanError("NaN in OHLC")
+    adjusted_ohlc = d[["adj_open", "adj_high", "adj_low", "adj_close"]].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    if adjusted_ohlc.isna().any().any() or not np.isfinite(adjusted_ohlc.to_numpy()).all():
+        raise CleanError("invalid adjusted OHLC")
 
     # Volume can be NaN for some sources; coerce to 0.
     d["volume"] = d["volume"].fillna(0)

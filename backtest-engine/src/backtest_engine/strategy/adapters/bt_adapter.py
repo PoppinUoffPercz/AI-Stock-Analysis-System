@@ -4,10 +4,10 @@ Plan section 3.2: BTAdapter wraps Cerebro, injects our CostModel via a custom
 broker-like scheme, and writes to BacktestResult via a custom Analyzer.
 
 Decisions made:
-  - We use backtrader's built-in broker for cash accounting, but apply slippage
-    via a custom Sizer-free path: orders are placed at market, fills occur at
-    next bar open by Backtrader's default, then we compute slippage as a
-    per-share extra cost debited from cash and accumulated into a TradeRecord.
+  - Orders fill at next-bar open by Backtrader's default. On completion, the
+    CostModel computes commission and volume-impact slippage from the executed
+    quantity, price, and bar volume; the combined cost is debited from broker
+    cash and the same values are written to the TradeRecord.
   - Strategy is generated programmatically from the entry/exit signal frame
     (same `signals` object the VBTAdapter consumes), so the SAME signal logic
     runs through both engines. This is the portability contract from M5 in
@@ -95,15 +95,25 @@ class _SignalDrivenStrategy(bt.Strategy):
                 if ts_raw.tzinfo
                 else pd.Timestamp(ts_raw).tz_localize("UTC")
             )
+            quantity = abs(float(order.executed.size))
+            fill_price = float(order.executed.price)
+            bar_volume = float(self.datas[0].volume[0])
+            commission = self._cm.commission(quantity, fill_price)
+            slippage_cost = self._cm.slippage_cost(quantity, fill_price, bar_volume)
+            # Backtrader's commission hook cannot receive bar volume. Debit the
+            # volume-impact estimate through the broker after the real fill so
+            # accounting and the trade log use the same executed-fill inputs.
+            self.broker.cash -= commission + slippage_cost
+            self.broker._get_value()  # refresh cached equity before analyzers run
             self._trade_log.append(
                 TradeRecord(
                     timestamp=timestamp,
                     symbol=getattr(order.info, "symbol", "UNKNOWN"),
                     side=getattr(order.info, "side", "LONG"),
-                    quantity=abs(float(order.executed.size)),
-                    fill_price=float(order.executed.price),
-                    commission=0.0,
-                    slippage_cost=0.0,
+                    quantity=quantity,
+                    fill_price=fill_price,
+                    commission=commission,
+                    slippage_cost=slippage_cost,
                 )
             )
             self._pending_order_ref = None

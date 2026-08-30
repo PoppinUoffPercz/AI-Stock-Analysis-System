@@ -201,3 +201,51 @@ def test_bt_adapter_clears_failed_pending_order_without_record(status):
 
     assert strategy._pending_order_ref is None
     assert strategy._trade_log == []
+
+
+@pytest.mark.smoke
+def test_bt_adapter_charges_execution_costs_to_broker_equity():
+    pytest.importorskip("backtrader")
+    idx = pd.date_range("2024-01-02", periods=4, freq="D", tz="UTC")
+    ohlc = pd.DataFrame(
+        {
+            "open": [100.0] * 4,
+            "high": [101.0] * 4,
+            "low": [99.0] * 4,
+            "close": [100.0] * 4,
+            "volume": [1000.0] * 4,
+        },
+        index=idx,
+    )
+    signals = pd.DataFrame(
+        {"entry": [True, False, False, False], "exit": [False, False, True, False]},
+        index=idx,
+    )
+    ohlc.attrs["symbol"] = "COSTS"
+    adapter = BTAdapter()
+    zero = adapter.run(
+        signals,
+        ohlc,
+        capital=1_000.0,
+        cost_model="zero",
+        strategy_name="costs",
+        universe_ref="COSTS",
+        params={},
+        run_id="zero-cost",
+    )
+    costly = adapter.run(
+        signals,
+        ohlc,
+        capital=1_000.0,
+        cost_model="us_equity_flat",
+        strategy_name="costs",
+        universe_ref="COSTS",
+        params={},
+        run_id="costly",
+    )
+
+    recorded_costs = sum(tr.commission + tr.slippage_cost for tr in costly.trades)
+    assert costly.final_equity < zero.final_equity
+    assert zero.final_equity == pytest.approx(1_000.0)
+    assert recorded_costs > 0.0
+    assert zero.final_equity - costly.final_equity == pytest.approx(recorded_costs)

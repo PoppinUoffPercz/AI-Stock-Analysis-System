@@ -45,8 +45,12 @@ class _SignalDrivenStrategy(bt.Strategy):
         # holds its own `self._trades` (DefaultDict keyed by data) set up by the
         # metaclass. Shadowing it crashes inside BT's notify path.
         self._trade_log: list = self.params.trade_log  # type: ignore[attr-defined]
+        self._pending_order_ref: int | None = None
 
     def next(self) -> None:
+        if self._pending_order_ref is not None:
+            return
+
         # Backtrader feeds us naive datetime objects; the entry/exit series
         # passed in via params were stripped of tz upstream (UTC naive). The
         # lookup day-normalizes both sides.
@@ -63,50 +67,53 @@ class _SignalDrivenStrategy(bt.Strategy):
 
         pos = self.getposition(self.datas[0])
         price = float(self.datas[0].close[0])
-        bar_vol = float(self.datas[0].volume[0]) if self.datas[0].volume else 1_000_000.0
         sym = self.datas[0]._name or "UNKNOWN"
 
         if entry and pos.size == 0:
             size = int(self.broker.getvalue() / max(price, 1e-6) * 0.99)
             if size > 0:
                 order = self.buy(data=self.datas[0], size=size)
-                self._record_trade(order, sym, price, bar_vol, side="LONG")
+                self._track_order(order, sym, side="LONG")
         elif exit_ and pos.size > 0:
             order = self.close(data=self.datas[0])
-            self._record_trade(order, sym, price, bar_vol, side="EXIT")
+            self._track_order(order, sym, side="EXIT")
 
-    def _record_trade(self, order, sym, price, bar_vol, side):
-        # Estimate fill at next bar open; we'll update later via notify_order.
-        size = abs(order.size if order is not None else 0)
-        if size == 0:
+    def _track_order(self, order, sym: str, side: str) -> None:
+        if order is None:
             return
-        slip_bps = self._cm.slippage_bps(size, bar_vol)
-        comm = self._cm.commission(size, price)
-        slip_cost = size * price * slip_bps / 1e4
-        self._trade_log.append(
-            TradeRecord(
-                timestamp=pd.Timestamp.now("UTC"),
-                symbol=sym,
-                side=side,
-                quantity=float(size),
-                fill_price=float(price),
-                commission=float(comm),
-                slippage_cost=float(slip_cost),
-            )
-        )
+        order.addinfo(symbol=sym, side=side)
+        self._pending_order_ref = order.ref
 
     def notify_order(self, order) -> None:
-        if order.status in [order.Completed] and self._trade_log:
-            # Update last trade's fill price + timestamp with actual fill data.
-            last = self._trade_log[-1]
-            if order.isbuy() or (order.issell() and last.side == "EXIT"):
-                last.fill_price = float(order.executed.price)
+        if self._pending_order_ref != order.ref:
+            return
+
+        if order.status == order.Completed:
             ts_raw = bt.num2date(order.executed.dt)
-            last.timestamp = (
+            timestamp = (
                 pd.Timestamp(ts_raw).tz_convert("UTC")
                 if ts_raw.tzinfo
                 else pd.Timestamp(ts_raw).tz_localize("UTC")
             )
+            self._trade_log.append(
+                TradeRecord(
+                    timestamp=timestamp,
+                    symbol=getattr(order.info, "symbol", "UNKNOWN"),
+                    side=getattr(order.info, "side", "LONG"),
+                    quantity=abs(float(order.executed.size)),
+                    fill_price=float(order.executed.price),
+                    commission=0.0,
+                    slippage_cost=0.0,
+                )
+            )
+            self._pending_order_ref = None
+        elif order.status in (
+            order.Canceled,
+            order.Margin,
+            order.Rejected,
+            order.Expired,
+        ):
+            self._pending_order_ref = None
 
 
 class _EquityAnalyzer(bt.Analyzer):

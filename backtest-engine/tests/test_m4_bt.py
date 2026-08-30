@@ -7,11 +7,14 @@ CostModel commission + slippage cost fields.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import backtrader as bt
 import numpy as np
 import pandas as pd
 import pytest
 
-from backtest_engine.strategy.adapters.bt_adapter import BTAdapter
+from backtest_engine.strategy.adapters.bt_adapter import BTAdapter, _SignalDrivenStrategy
 from backtest_engine.strategy.builtin import sma_cross
 
 
@@ -96,3 +99,105 @@ def test_bt_adapter_zero_cost_keeps_equity_near_buy_and_hold_when_always_long():
     assert result.final_equity > 0
     rel_diff = abs(result.final_equity - bh_final) / bh_final
     assert rel_diff < 0.15, f"final_equity={result.final_equity:.2f} vs bh_final={bh_final:.2f}"
+
+
+@pytest.mark.smoke
+def test_bt_adapter_does_not_record_final_bar_order():
+    pytest.importorskip("backtrader")
+    idx = pd.date_range("2024-01-02", periods=3, freq="D", tz="UTC")
+    ohlc = pd.DataFrame(
+        {
+            "open": [100.0, 200.0, 300.0],
+            "high": [101.0, 201.0, 301.0],
+            "low": [99.0, 199.0, 299.0],
+            "close": [100.0, 200.0, 300.0],
+            "volume": [1000.0] * 3,
+        },
+        index=idx,
+    )
+    signals = pd.DataFrame(
+        {"entry": [False, False, True], "exit": [False, False, False]},
+        index=idx,
+    )
+    ohlc.attrs["symbol"] = "FINAL"
+
+    result = BTAdapter().run(
+        signals,
+        ohlc,
+        capital=1_000.0,
+        cost_model="zero",
+        strategy_name="final-bar",
+        universe_ref="FINAL",
+        params={},
+        run_id="final-bar",
+    )
+
+    assert result.trades == []
+
+
+@pytest.mark.smoke
+def test_bt_adapter_records_each_completed_order_with_execution_data():
+    pytest.importorskip("backtrader")
+    idx = pd.date_range("2024-01-02", periods=4, freq="D", tz="UTC")
+    ohlc = pd.DataFrame(
+        {
+            "open": [100.0, 10.0, 20.0, 30.0],
+            "high": [101.0, 11.0, 21.0, 31.0],
+            "low": [99.0, 9.0, 19.0, 29.0],
+            "close": [100.0, 10.0, 20.0, 30.0],
+            "volume": [1000.0] * 4,
+        },
+        index=idx,
+    )
+    signals = pd.DataFrame(
+        {"entry": [True, False, False, False], "exit": [False, False, True, False]},
+        index=idx,
+    )
+    ohlc.attrs["symbol"] = "EXECUTED"
+
+    result = BTAdapter().run(
+        signals,
+        ohlc,
+        capital=1_000.0,
+        cost_model="zero",
+        strategy_name="executed",
+        universe_ref="EXECUTED",
+        params={},
+        run_id="executed",
+    )
+
+    assert len(result.trades) == 2
+    entry, exit_ = result.trades
+    assert (entry.timestamp, entry.quantity, entry.fill_price, entry.side) == (
+        idx[1],
+        9.0,
+        10.0,
+        "LONG",
+    )
+    assert (exit_.timestamp, exit_.quantity, exit_.fill_price, exit_.side) == (
+        idx[3],
+        9.0,
+        30.0,
+        "EXIT",
+    )
+
+
+@pytest.mark.parametrize("status", [bt.Order.Canceled, bt.Order.Margin, bt.Order.Rejected])
+def test_bt_adapter_clears_failed_pending_order_without_record(status):
+    strategy = object.__new__(_SignalDrivenStrategy)
+    strategy._pending_order_ref = 7
+    strategy._trade_log = []
+    order = SimpleNamespace(
+        ref=7,
+        status=status,
+        Completed=bt.Order.Completed,
+        Canceled=bt.Order.Canceled,
+        Margin=bt.Order.Margin,
+        Rejected=bt.Order.Rejected,
+        Expired=bt.Order.Expired,
+    )
+
+    strategy.notify_order(order)
+
+    assert strategy._pending_order_ref is None
+    assert strategy._trade_log == []

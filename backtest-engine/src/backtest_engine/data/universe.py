@@ -44,20 +44,27 @@ class Universe:
     def from_csv(cls, path: str | Path) -> Universe:
         return cls(pd.read_csv(path))
 
-    def as_of(self, date: str | pd.Timestamp) -> list[str]:
+    @staticmethod
+    def _utc_date(date: str | pd.Timestamp) -> pd.Timestamp:
         d = pd.Timestamp(date)
-        if d.tz is None:
-            d = d.tz_localize("UTC")
-        live = self._df[
-            ((self._df["list_date"].isna()) | (self._df["list_date"] <= d))
-            & ((self._df["delist_date"].isna()) | (self._df["delist_date"] > d))
-        ]
-        return sorted(live["symbol"].tolist())
+        return d.tz_localize("UTC") if d.tz is None else d
+
+    def _is_member(self, symbol: str, date: str | pd.Timestamp) -> bool:
+        """Return whether a known symbol was listed and not yet delisted."""
+        d = self._utc_date(date)
+        rows = self._df[self._df["symbol"] == symbol.upper()]
+        if rows.empty:
+            return False
+        member = (rows["list_date"].isna() | (rows["list_date"] <= d)) & (
+            rows["delist_date"].isna() | (rows["delist_date"] > d)
+        )
+        return bool(member.any())
+
+    def as_of(self, date: str | pd.Timestamp) -> list[str]:
+        return sorted(sym for sym in self._df["symbol"].unique() if self._is_member(sym, date))
 
     def is_delisted(self, symbol: str, date: str | pd.Timestamp) -> bool:
-        d = pd.Timestamp(date)
-        if d.tz is None:
-            d = d.tz_localize("UTC")
+        d = self._utc_date(date)
         rows = self._df[self._df["symbol"].str.upper() == symbol.upper()]
         if rows.empty:
             return False
@@ -67,7 +74,7 @@ class Universe:
     def filter_panel(
         self, panel: pd.DataFrame, symbol_col: str = "symbol", date_col: str = "timestamp"
     ) -> pd.DataFrame:
-        """Drop rows for any symbol after its delist date (point-in-time discipline)."""
+        """Keep only rows for symbols active on each row's date."""
         if panel.empty:
             return panel
         out = panel.copy()
@@ -75,7 +82,7 @@ class Universe:
         out[date_col] = pd.to_datetime(out[date_col], utc=True)
         keep_mask = []
         for sym, ts in zip(out[symbol_col], out[date_col], strict=False):
-            keep_mask.append(not self.is_delisted(sym, ts))
+            keep_mask.append(self._is_member(sym, ts))
         return out.loc[keep_mask].reset_index(drop=True)
 
 

@@ -410,7 +410,9 @@ def test_universe_filter_panel_drops_post_delist_rows():
     panel = pd.DataFrame(
         [
             {"symbol": "AAA", "timestamp": "2025-01-01", "close": 100},
+            {"symbol": "BBB", "timestamp": "2009-01-01", "close": 49},  # drop: before listing
             {"symbol": "BBB", "timestamp": "2020-01-01", "close": 50},  # OK, before delist
+            {"symbol": "BBB", "timestamp": "2020-06-30", "close": 51},  # drop: delist date
             {"symbol": "BBB", "timestamp": "2021-01-01", "close": 51},  # drop: post-delist
         ]
     )

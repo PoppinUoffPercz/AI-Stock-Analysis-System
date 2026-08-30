@@ -74,15 +74,18 @@ def test_block_bootstrap_returns_runnable():
 
 
 def test_permutation_p_value_in_unit_interval():
-    # Drift-only returns: no real entry edge vs random.
-    rets = pd.Series(
+    market_returns = pd.Series(
         np.random.default_rng(0).normal(0.001, 0.01, 252),
         index=pd.bdate_range("2020-01-01", periods=252).tz_localize("UTC"),
     )
+    real_entries = pd.Series(False, index=market_returns.index)
+    real_entries.iloc[::25] = True
     res = random_entry_permutation(
-        rets,
-        n_entries=10,
+        market_returns,
+        real_entries,
         metric_fn=lambda eq, r: total_return(eq),
+        n_entries=10,
+        holding_period=1,
         n_trials=100,
         rng_seed=11,
     )
@@ -91,12 +94,90 @@ def test_permutation_p_value_in_unit_interval():
 
 
 def test_permutation_zero_entries_returns_unit_p():
-    rets = pd.Series(
+    market_returns = pd.Series(
         [0.0, 0.01, 0.02], index=pd.bdate_range("2020-01-01", periods=3).tz_localize("UTC")
     )
-    res = random_entry_permutation(rets, n_entries=0, metric_fn=lambda eq, r: 0.0)
+    real_entries = pd.Series(False, index=market_returns.index)
+    res = random_entry_permutation(
+        market_returns,
+        real_entries,
+        metric_fn=lambda eq, r: 0.0,
+        n_entries=0,
+    )
     assert res.p_value == 1.0
     assert res.n_trials == 0
+
+
+def test_permutation_n_entries_changes_random_trials():
+    market_returns = pd.Series(
+        np.linspace(-0.01, 0.02, 40),
+        index=pd.bdate_range("2020-01-01", periods=40).tz_localize("UTC"),
+    )
+    real_entries = pd.Series(False, index=market_returns.index)
+    real_entries.iloc[[5, 15, 25]] = True
+    one = random_entry_permutation(
+        market_returns,
+        real_entries,
+        metric_fn=lambda eq, r: total_return(eq),
+        n_entries=1,
+        holding_period=2,
+        n_trials=50,
+        rng_seed=3,
+    )
+    three = random_entry_permutation(
+        market_returns,
+        real_entries,
+        metric_fn=lambda eq, r: total_return(eq),
+        n_entries=3,
+        holding_period=2,
+        n_trials=50,
+        rng_seed=3,
+    )
+
+    assert not np.allclose(one.random_metrics, three.random_metrics)
+
+
+def test_permutation_detects_known_entry_edge_with_finite_sample_p_value():
+    idx = pd.bdate_range("2020-01-01", periods=100).tz_localize("UTC")
+    market_returns = pd.Series(0.0, index=idx)
+    real_entries = pd.Series(False, index=idx)
+    real_entries.iloc[[10, 30, 50]] = True
+    market_returns.iloc[[11, 31, 51]] = 0.20
+
+    res = random_entry_permutation(
+        market_returns,
+        real_entries,
+        metric_fn=lambda eq, r: total_return(eq),
+        n_entries=3,
+        holding_period=1,
+        n_trials=500,
+        rng_seed=9,
+    )
+
+    assert res.real_metric > 0.5
+    assert res.p_value == pytest.approx(1 / 501)
+
+
+def test_permutation_noise_is_not_systematically_significant():
+    idx = pd.bdate_range("2020-01-01", periods=252).tz_localize("UTC")
+    market_returns = pd.Series(np.random.default_rng(0).normal(0.0, 0.01, 252), index=idx)
+    real_entries = pd.Series(False, index=idx)
+    real_entries.iloc[::25] = True
+
+    p_values = [
+        random_entry_permutation(
+            market_returns,
+            real_entries,
+            metric_fn=lambda eq, r: total_return(eq),
+            n_entries=int(real_entries.sum()),
+            holding_period=1,
+            n_trials=300,
+            rng_seed=seed,
+        ).p_value
+        for seed in range(10)
+    ]
+
+    assert all(p > 0.05 for p in p_values)
 
 
 # --- Stability ------------------------------------------------------------

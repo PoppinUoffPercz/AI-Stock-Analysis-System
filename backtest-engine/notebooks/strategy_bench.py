@@ -118,11 +118,15 @@ def run_monte_carlo(equity: pd.Series, *, n_trials: int = 500):
     return shuffle_trade_order(equity, n_trials=n_trials, rng_seed=42)
 
 
-def run_permutation(returns: pd.Series, n_trades: int, *, n_trials: int = 500):
+def run_permutation(
+    ohlc: pd.DataFrame, real_entries: pd.Series, n_trades: int, *, n_trials: int = 500
+):
     return random_entry_permutation(
-        returns,
-        n_entries=max(1, n_trades),
+        ohlc["close"].pct_change().fillna(0.0),
+        real_entries,
         metric_fn=lambda eq, r: total_return(eq),
+        n_entries=max(1, n_trades),
+        holding_period=1,
         n_trials=n_trials,
     )
 
@@ -196,7 +200,8 @@ def main(strategy_name: str | None = None) -> int:
 
     # 4) permutation
     _print_header("PERMUTATION TEST (vs random-entry H0)")
-    perm = run_permutation(res.returns, int(res.n_trades))
+    signals = spec.signal_factory(ohlc, spec.params)
+    perm = run_permutation(ohlc, signals["entry"], int(res.n_trades))
     print(f"  real total_return:   {perm.real_metric:+.4f}")
     print(f"  random p-value:      {perm.p_value:.4f}  (lower is more significant)")
 

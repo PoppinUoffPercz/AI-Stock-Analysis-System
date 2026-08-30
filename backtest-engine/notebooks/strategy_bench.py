@@ -24,6 +24,8 @@ adapt for your own hypothesis file.
 from __future__ import annotations
 
 import sys
+from itertools import product
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -76,19 +78,76 @@ def run_single(spec: StrategySpec, ohlc: pd.DataFrame, engine: str = "vectorbt")
 # ---------------------------------------------------------------------------
 
 
-def optimise_naive(spec: StrategySpec, is_ohlc: pd.DataFrame) -> dict:
-    """Return the default params without searching.
+DEFAULT_PARAM_GRIDS: dict[str, dict[str, list[Any]]] = {
+    "sma_cross": {"fast": [5, 10, 20], "slow": [30, 50]},
+    "rsi_reversion": {
+        "period": [10, 14, 20],
+        "entry_level": [25, 30, 35],
+        "exit_level": [45, 50, 55],
+    },
+    "bollinger_breakout": {
+        "period": [15, 20, 30],
+        "std_dev": [1.5, 2.0, 2.5],
+        "stop_outside": [False, True],
+    },
+}
 
-    Replace this with a real param-grid sweep + best-Sharpe selection when
-    you're past the initial hypothesis test.
-    """
-    return spec.params
+
+def optimise_grid(
+    spec: StrategySpec,
+    is_ohlc: pd.DataFrame,
+    *,
+    param_grid: dict[str, list[Any]],
+    objective: str = "total_return",
+) -> dict[str, Any]:
+    """Choose parameters by evaluating only the supplied in-sample bars."""
+    if objective not in {"total_return", "sharpe"}:
+        raise ValueError("objective must be 'total_return' or 'sharpe'")
+    keys = list(param_grid)
+    candidates = (dict(zip(keys, values, strict=True)) for values in product(*param_grid.values()))
+    best_params: dict[str, Any] | None = None
+    best_score = float("-inf")
+    for candidate in candidates:
+        result = run_spec(
+            spec,
+            is_ohlc,
+            engine="vectorbt",
+            params=candidate,
+            run_id="bench-wf-is",
+        )
+        score = (
+            total_return(result.equity)
+            if objective == "total_return"
+            else attach_metric_panel(result)["sharpe"]
+        )
+        if np.isfinite(score) and (best_params is None or score > best_score):
+            best_score = float(score)
+            best_params = candidate
+    if best_params is None:
+        raise ValueError("no valid parameter combination produced a finite objective")
+    return best_params
 
 
 def run_walk_forward(
-    spec: StrategySpec, ohlc: pd.DataFrame, *, is_years: int = 3, oos_years: int = 1
+    spec: StrategySpec,
+    ohlc: pd.DataFrame,
+    *,
+    is_years: int = 3,
+    oos_years: int = 1,
+    param_grid: dict[str, list[Any]] | None = None,
+    objective: str = "total_return",
+    min_valid_folds: int = 1,
 ):
     is_windows, oos_windows = rolling_windows(ohlc, is_years=is_years, oos_years=oos_years)
+
+    if min_valid_folds < 1:
+        raise ValueError("min_valid_folds must be at least 1")
+    grid = param_grid or DEFAULT_PARAM_GRIDS.get(
+        spec.name, {key: [value] for key, value in spec.params.items()}
+    )
+
+    def optimise(spec_: StrategySpec, is_ohlc_: pd.DataFrame) -> dict[str, Any]:
+        return optimise_grid(spec_, is_ohlc_, param_grid=grid, objective=objective)
 
     def _run(spec_, ohlc_, **kw):
         return run_spec(
@@ -99,14 +158,20 @@ def run_walk_forward(
             run_id=kw.get("run_id", "wf"),
         )
 
-    return walk_forward(
+    result = walk_forward(
         spec,
         ohlc,
         run_engine=_run,
-        optimize=optimise_naive,
+        optimize=optimise,
         is_windows=is_windows,
         oos_windows=oos_windows,
     )
+    if len(result.fold_params) < min_valid_folds:
+        raise ValueError(
+            f"walk-forward produced {len(result.fold_params)} valid folds; "
+            f"minimum valid folds is {min_valid_folds}"
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------

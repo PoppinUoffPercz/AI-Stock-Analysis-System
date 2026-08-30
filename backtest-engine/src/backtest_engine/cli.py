@@ -29,6 +29,7 @@ from backtest_engine.data.store import read_clean
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
 from backtest_engine.metrics.tearsheet import make_report_config, render_report
 from backtest_engine.pipeline.discovery import run_spec
+from backtest_engine.strategy.persistence import load_result
 from backtest_engine.strategy.registry import REGISTRY, get_strategy
 from backtest_engine.strategy.spec import StrategySpec
 
@@ -186,11 +187,12 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         params=default_params,
     )
     settings = resolve_settings()
+    data_root = args.data_root or settings.data_dir
+    universe_root = args.universe_root or settings.universe_dir
     if args.synthetic:
         ohlc = _synthetic_ohlc(symbol=args.symbol, days=args.days, seed=args.seed)
         source_label = "synthetic"
     else:
-        data_root = args.data_root or settings.data_dir
         try:
             ohlc = _clean_ohlc(
                 args.symbol,
@@ -201,16 +203,34 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        universe_root = args.universe_root or settings.universe_dir
         spec.universe_ref = str(universe_root)
         source_label = str(data_root / "clean")
     engine = "backtrader" if args.cmd == "validate" else args.engine
     run_id = f"bte-{args.cmd}-{uuid.uuid4().hex[:8]}"
     res = run_spec(spec, ohlc, engine=engine, run_id=run_id)
+    symbol = str(ohlc.attrs.get("symbol", args.symbol)).upper()
+    res.metadata = {
+        "symbols": [symbol],
+        "date_range": {
+            "start": pd.Timestamp(ohlc.index[0]).isoformat(),
+            "end": pd.Timestamp(ohlc.index[-1]).isoformat(),
+        },
+        "data_source": source_label,
+        "data_root": str(data_root),
+        "universe_root": str(universe_root),
+        "requested_start": args.start,
+        "requested_end": args.end,
+        "synthetic": bool(args.synthetic),
+        "execution": {
+            "engine": res.engine,
+            "cost_model": res.cost_model,
+            "capital": res.capital,
+        },
+    }
     print(f"Run id: {res.run_id}")
     print(f"Engine: {res.engine}")
     print(f"Strategy: {res.strategy_name}")
-    print(f"Data: {ohlc.attrs.get('symbol', args.symbol).upper()} ({source_label})")
+    print(f"Data: {symbol} ({source_label})")
     print(f"Params: {res.params}")
     metrics = attach_metric_panel(res)
     print(
@@ -233,15 +253,28 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
     settings = resolve_settings()
     outputs_dir = settings.outputs_dir
-    metrics_path = outputs_dir / args.run_id / "metrics.json"
+    out_dir = outputs_dir / args.run_id
+    result_path = out_dir / "result.json"
+    if result_path.exists():
+        try:
+            result = load_result(result_path)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"Invalid persisted result for run {args.run_id}: {exc}", file=sys.stderr)
+            return 1
+        report = render_report(
+            result,
+            make_report_config(run_id=result.run_id, outputs_dir=outputs_dir),
+        )
+        print(f"Report written to {report.html_path}")
+        return 0
+
+    metrics_path = out_dir / "metrics.json"
     if not metrics_path.exists():
         print(f"No metrics.json for run {args.run_id} under {outputs_dir}", file=sys.stderr)
         return 1
     metrics = json.loads(metrics_path.read_text())
-    # Without preserving the full BacktestResult on disk we render a minimal
-    # report from the metrics.json only. A future serialization of the result
-    # (M9) would let us regen the full plotly panels here.
-    out_dir = outputs_dir / args.run_id
+    # Legacy metric-only artifacts remain readable, but new runs persist the
+    # complete BacktestResult and take the branch above.
     html_path = out_dir / "report.html"
     html_path.write_text(
         f"<!doctype html><html><body><h1>Report {args.run_id}</h1>"

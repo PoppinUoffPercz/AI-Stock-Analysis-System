@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -136,11 +137,40 @@ def test_cli_run_then_report_persists_artifacts(tmp_path: Path, capsys, monkeypa
     run_dir = tmp_path / "outputs" / run_id
 
     assert (run_dir / "metrics.json").exists()
+    assert (run_dir / "result.json").exists()
     assert (run_dir / "report.html").exists()
 
     rc = cli.main(["report", "--run-id", run_id])
     assert rc == 0
     assert (run_dir / "report.html").exists()
+
+
+@pytest.mark.smoke
+def test_cli_report_reloads_complete_result_without_backtest(tmp_path: Path, capsys, monkeypatch):
+    pytest.importorskip("vectorbt")
+    monkeypatch.chdir(tmp_path)
+
+    assert cli.main(["discover", "--strategy", "sma_cross", "--synthetic", "--days", "200"]) == 0
+    run_id = next(
+        line.split(": ", 1)[1]
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("Run id: ")
+    )
+    captured: dict[str, object] = {}
+
+    def fake_report(result, cfg):
+        captured["result"] = result
+        return SimpleNamespace(
+            out_dir=tmp_path / "outputs" / run_id, html_path=tmp_path / "report.html"
+        )
+
+    monkeypatch.setattr(cli, "render_report", fake_report)
+    monkeypatch.setattr(cli, "run_spec", lambda *args, **kwargs: pytest.fail("backtest rerun"))
+
+    assert cli.main(["report", "--run-id", run_id]) == 0
+    loaded = captured["result"]
+    assert loaded.run_id == run_id
+    assert loaded.equity.index.tz is not None
 
 
 @pytest.mark.smoke

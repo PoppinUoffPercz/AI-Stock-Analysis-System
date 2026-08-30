@@ -45,6 +45,8 @@ class BacktestResult:
     # Optional raw engine metric blob for debugging; metrics.core computes the
     # normalized metric dict from equity/returns.
     raw_metrics: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, float] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def n_trades(self) -> int:

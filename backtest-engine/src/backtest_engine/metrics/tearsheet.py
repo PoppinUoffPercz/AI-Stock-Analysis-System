@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
+from backtest_engine.strategy.persistence import persist_result
 
 
 @dataclass
@@ -58,9 +59,11 @@ def render_report(
     """
     metrics = attach_metric_panel(result)
     flags = bias_audit(metrics)
+    result.metrics = metrics
 
     out_dir = Path(cfg.outputs_dir) / cfg.run_id
     out_dir.mkdir(parents=True, exist_ok=True)
+    persist_result(result, out_dir, metrics=metrics)
 
     html_path: Path | None = None
 

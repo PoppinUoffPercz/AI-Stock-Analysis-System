@@ -20,10 +20,13 @@ pre-commit install
 ## Usage
 
 ```
-bte discover --strategy sma_cross --universe spx --start 2010-01-01 --end 2025-12-31
-bte validate --strategy sma_cross --universe spx --start 2010-01-01 --end 2025-12-31
-bte report   --run <run_id>
+bte discover --strategy sma_cross --days 756 --seed 42
+bte validate --strategy sma_cross --days 756 --seed 42
+bte report   --run-id <run-id-from-discover-or-validate>
 ```
+
+Each successful discover or validate run writes `metrics.json` and `report.html`
+under `outputs/<run-id>/` and prints both artifact paths.
 
 ## Status
 

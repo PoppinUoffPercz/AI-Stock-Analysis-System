@@ -36,8 +36,9 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 
-bte discover --strategy sma_cross --universe spx --start 2010-01-01 --end 2025-12-31
-bte validate --strategy sma_cross --universe spx --start 2010-01-01 --end 2025-12-31
+bte discover --strategy sma_cross --days 756 --seed 42
+bte validate --strategy sma_cross --days 756 --seed 42
+bte report --run-id <run-id-from-discover-or-validate>
 python -m pytest -q
 ```
 

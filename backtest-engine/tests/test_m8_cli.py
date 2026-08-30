@@ -44,6 +44,27 @@ def test_cli_discover_runs_full_pipeline(capsys):
 
 
 @pytest.mark.smoke
+def test_cli_run_then_report_persists_artifacts(tmp_path: Path, capsys, monkeypatch):
+    pytest.importorskip("vectorbt")
+    monkeypatch.chdir(tmp_path)
+
+    rc = cli.main(["discover", "--strategy", "sma_cross", "--days", "200", "--seed", "1"])
+    assert rc == 0
+    run_output = capsys.readouterr().out
+    run_id = next(
+        line.split(": ", 1)[1] for line in run_output.splitlines() if line.startswith("Run id: ")
+    )
+    run_dir = tmp_path / "outputs" / run_id
+
+    assert (run_dir / "metrics.json").exists()
+    assert (run_dir / "report.html").exists()
+
+    rc = cli.main(["report", "--run-id", run_id])
+    assert rc == 0
+    assert (run_dir / "report.html").exists()
+
+
+@pytest.mark.smoke
 def test_cli_validate_runs_backtrader(capsys):
     pytest.importorskip("backtrader")
     rc = cli.main(["validate", "--strategy", "rsi_reversion", "--days", "200", "--seed", "5"])

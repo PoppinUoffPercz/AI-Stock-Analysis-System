@@ -26,6 +26,7 @@ import pandas as pd
 from backtest_engine import __version__
 from backtest_engine.config import resolve_settings
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
+from backtest_engine.metrics.tearsheet import make_report_config, render_report
 from backtest_engine.pipeline.discovery import run_spec
 from backtest_engine.strategy.registry import REGISTRY, get_strategy
 from backtest_engine.strategy.spec import StrategySpec
@@ -147,6 +148,12 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         )
     )
     print(f"Bias flags: {bias_audit(metrics)}")
+    report = render_report(
+        res,
+        make_report_config(run_id=res.run_id, outputs_dir=resolve_settings().outputs_dir),
+    )
+    print(f"Metrics written to {report.out_dir / 'metrics.json'}")
+    print(f"Report written to {report.html_path}")
     return 0
 
 

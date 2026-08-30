@@ -62,8 +62,14 @@ def bootstrap_trade_returns(
     *,
     n_trials: int = 1000,
     rng_seed: int = 7,
+    periods_per_year: int | None = None,
 ) -> BootstrapResult:
-    """Bootstrap realized trade returns for terminal wealth and Sharpe samples."""
+    """Bootstrap realized returns for terminal wealth and per-trade Sharpe samples.
+
+    Sharpe is unannualized by default. Pass ``periods_per_year`` only when the
+    sampled returns represent a regular period that should be annualized.
+    """
+    _validate_periods_per_year(periods_per_year)
     returns = _as_returns(trade_returns)
     if len(returns) == 0 or n_trials < 1:
         return _empty_bootstrap_result()
@@ -78,7 +84,7 @@ def bootstrap_trade_returns(
         wealth = np.cumprod(1 + sample)
         terminal[i] = float(wealth[-1])
         max_dds[i] = _max_drawdown_from_returns(sample)
-        sharpes[i] = _sharpe(sample)
+        sharpes[i] = _sharpe(sample, periods_per_year=periods_per_year)
     return _bootstrap_result(max_dds, sharpes, terminal, realized_mdd)
 
 
@@ -88,15 +94,26 @@ def block_bootstrap_returns(
     block_size: int = 21,
     n_trials: int = 1000,
     rng_seed: int = 7,
+    periods_per_year: int | None = None,
 ) -> BootstrapResult:
-    """Block-bootstrap returns to preserve short-lag autocorrelation."""
+    """Block-bootstrap returns to preserve short-lag autocorrelation.
+
+    Sharpe is unannualized by default; ``periods_per_year`` opts into
+    annualization.
+    """
     if block_size < 1:
         raise ValueError("block_size must be at least 1")
+    _validate_periods_per_year(periods_per_year)
     r = _as_returns(returns)
     if len(r) == 0 or n_trials < 1:
         return _empty_bootstrap_result()
     if len(r) < block_size * 2:
-        return bootstrap_trade_returns(pd.Series(r), n_trials=n_trials, rng_seed=rng_seed)
+        return bootstrap_trade_returns(
+            pd.Series(r),
+            n_trials=n_trials,
+            rng_seed=rng_seed,
+            periods_per_year=periods_per_year,
+        )
 
     rng = np.random.default_rng(rng_seed)
     realized_mdd = _max_drawdown_from_returns(r)
@@ -110,7 +127,7 @@ def block_bootstrap_returns(
         wealth = np.cumprod(1 + sample)
         terminal[i] = float(wealth[-1])
         max_dds[i] = _max_drawdown_from_returns(sample)
-        sharpes[i] = _sharpe(sample)
+        sharpes[i] = _sharpe(sample, periods_per_year=periods_per_year)
     return _bootstrap_result(max_dds, sharpes, terminal, realized_mdd)
 
 
@@ -140,18 +157,24 @@ def _empty_bootstrap_result() -> BootstrapResult:
     return BootstrapResult(0, empty, empty, empty, 0.0, 0.0, 0.0)
 
 
-def _sharpe(returns: np.ndarray) -> float:
+def _sharpe(returns: np.ndarray, periods_per_year: int | None = None) -> float:
     sd = returns.std(ddof=1)
     if not np.isfinite(sd) or sd == 0:
         return 0.0
-    return float(returns.mean() / sd * np.sqrt(252))
+    annualization = np.sqrt(periods_per_year) if periods_per_year is not None else 1.0
+    return float(returns.mean() / sd * annualization)
+
+
+def _validate_periods_per_year(periods_per_year: int | None) -> None:
+    if periods_per_year is not None and periods_per_year < 1:
+        raise ValueError("periods_per_year must be at least 1")
 
 
 def _max_drawdown_from_returns(rets: np.ndarray) -> float:
     """Compute max drawdown of a returns array as a single float (negative or 0)."""
     if len(rets) == 0:
         return 0.0
-    wealth = np.cumprod(1 + rets)
+    wealth = np.concatenate(([1.0], np.cumprod(1 + rets)))
     running_max = np.maximum.accumulate(wealth)
     dd = (wealth - running_max) / running_max
     return float(dd.min())

@@ -65,6 +65,12 @@ def test_montecarlo_handles_short_trade_returns():
     assert mc.n_trials == 0
 
 
+def test_montecarlo_drawdown_includes_initial_wealth():
+    mc = shuffle_trade_order(pd.Series([-0.5, 0.1]), n_trials=20, rng_seed=42)
+
+    np.testing.assert_allclose(mc.max_dd_pcts, -0.5)
+
+
 def test_block_bootstrap_returns_runnable():
     eq = _equity(seed=2, n=400, drift=0.0015, vol=0.012)
     r = eq.pct_change().dropna()
@@ -80,6 +86,30 @@ def test_bootstrap_trade_returns_changes_terminal_wealth_and_sharpe():
 
     assert np.unique(bootstrap.terminal_wealth).size > 1
     assert np.unique(bootstrap.sharpe_samples).size > 1
+
+
+def test_montecarlo_sharpe_is_unannualized_by_default():
+    trade_returns = pd.Series([0.10, -0.05, 0.20, -0.10, 0.03, 0.01])
+
+    unannualized = bootstrap_trade_returns(trade_returns, n_trials=50, rng_seed=42)
+    annualized = bootstrap_trade_returns(
+        trade_returns, n_trials=50, rng_seed=42, periods_per_year=252
+    )
+
+    np.testing.assert_allclose(
+        annualized.sharpe_samples, unannualized.sharpe_samples * np.sqrt(252)
+    )
+
+
+def test_block_bootstrap_accepts_explicit_sharpe_periods():
+    returns = pd.Series([0.01, -0.02, 0.03, 0.01, -0.01, 0.02])
+
+    unannualized = block_bootstrap_returns(returns, block_size=2, n_trials=50, rng_seed=42)
+    annualized = block_bootstrap_returns(
+        returns, block_size=2, n_trials=50, rng_seed=42, periods_per_year=4
+    )
+
+    np.testing.assert_allclose(annualized.sharpe_samples, unannualized.sharpe_samples * 2)
 
 
 # --- Permutation ----------------------------------------------------------

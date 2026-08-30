@@ -14,8 +14,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from backtest_engine.pipeline.discovery import run_spec
 from backtest_engine.strategy.adapters.bt_adapter import BTAdapter, _SignalDrivenStrategy
 from backtest_engine.strategy.builtin import sma_cross
+from backtest_engine.strategy.spec import StrategySpec
 
 
 def _synth_ohlc(n: int = 300, start: str = "2018-01-02", seed: int = 42) -> pd.DataFrame:
@@ -99,6 +101,21 @@ def test_bt_adapter_zero_cost_keeps_equity_near_buy_and_hold_when_always_long():
     assert result.final_equity > 0
     rel_diff = abs(result.final_equity - bh_final) / bh_final
     assert rel_diff < 0.15, f"final_equity={result.final_equity:.2f} vs bh_final={bh_final:.2f}"
+
+
+@pytest.mark.smoke
+def test_backtrader_normalizes_non_midnight_utc_signal_timestamps():
+    pytest.importorskip("backtrader")
+    ohlc = _synth_ohlc(n=400, seed=3)
+    ohlc.index = ohlc.index + pd.Timedelta(hours=5)
+    spec = StrategySpec(
+        name="sma_cross",
+        signal_factory=sma_cross,
+        capital=100_000.0,
+        params={"fast": 10, "slow": 50},
+    )
+    result = run_spec(spec, ohlc, engine="backtrader")
+    assert result.n_trades > 0
 
 
 @pytest.mark.smoke

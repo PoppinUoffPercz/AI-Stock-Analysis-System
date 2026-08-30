@@ -22,3 +22,46 @@ jobs:
       - run: ruff format --check src tests
       - run: mypy src
       - run: pytest -q
+
+  optional-execution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev,execution]"
+      - run: python -c "import nautilus_trader; from backtest_engine.strategy.adapters.nautilus_adapter import NautilusAdapter; print(nautilus_trader.__version__, NautilusAdapter.name)"
+      - run: pytest -q tests/test_m5_portability.py tests/test_m8_cli.py -k "nautilus or replay"
+
+  optional-broker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e ".[dev,broker]"
+      - run: python -c "import alpaca; print(alpaca.__name__)"
+
+  optional-statistics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e ".[dev,statistics]"
+      - run: python -c "import scipy, sklearn, statsmodels; print(scipy.__version__, sklearn.__version__, statsmodels.__version__)"
+      - run: pytest -q tests/test_m6_validation.py
+
+  optional-reporting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e ".[dev,reporting]"
+      - run: python -c "import matplotlib, plotly, quantstats; print(matplotlib.__version__, plotly.__version__, quantstats.__version__)"
+      - run: pytest -q tests/test_m7_reporting.py

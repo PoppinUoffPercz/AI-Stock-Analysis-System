@@ -101,11 +101,23 @@ def test_cli_real_backtest_reports_missing_clean_data(tmp_path: Path, capsys, mo
     assert "No clean data for symbol MISSING" in capsys.readouterr().err
 
 
-def test_cli_replay_returns_stub_message(capsys):
-    rc = cli.main(["replay"])
-    assert rc == 2
+def test_cli_replay_reports_missing_real_data(tmp_path: Path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rc = cli.main(["replay", "--strategy", "sma_cross", "--data-root", str(tmp_path / "data")])
+    assert rc == 1
     err = capsys.readouterr().err
-    assert "not implemented" in err
+    assert "No clean data for symbol SPY" in err
+
+
+@pytest.mark.smoke
+def test_cli_replay_runs_native_engine(capsys):
+    pytest.importorskip("nautilus_trader")
+    rc = cli.main(
+        ["replay", "--strategy", "sma_cross", "--synthetic", "--days", "500", "--seed", "1"]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Engine: nautilus" in out
 
 
 @pytest.mark.smoke

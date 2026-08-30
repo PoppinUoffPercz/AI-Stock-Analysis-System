@@ -5,6 +5,7 @@ Commands shipped in v1 (M2/M4/M7/M8):
   - `bte discover`    - run a Phase 1 (vectorized) backtest on persisted clean data
   - `bte validate`   - run a Phase 2 (Backtrader) backtest on persisted clean data
   - `bte report`      - generate a QuantStats-style tearsheet for the latest run
+  - `bte replay`      - replay persisted bars through NautilusTrader
   - `bte list-strats` - list built-in strategies
 
 The CLI reads persisted clean data by default. Synthetic data is available only
@@ -98,7 +99,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("settings", help="Print resolved settings as JSON")
     sub.add_parser("strats", help="List built-in strategies")
 
-    d = sub.add_parser("discover", help="Phase 1 - VectorBT discovery (single run on synth data)")
+    d = sub.add_parser("discover", help="Phase 1 - VectorBT discovery (single persisted-data run)")
     d.add_argument("--strategy", required=True, choices=sorted(REGISTRY))
     d.add_argument(
         "--cost", default="zero", help="Cost model preset (zero|us_equity_pershare|us_equity_flat)"
@@ -110,7 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_data_options(d)
 
     v = sub.add_parser(
-        "validate", help="Phase 2 - Backtrader validation (single run on synth data)"
+        "validate", help="Phase 2 - Backtrader validation (single persisted-data run)"
     )
     v.add_argument("--strategy", required=True, choices=sorted(REGISTRY))
     v.add_argument("--cost", default="zero")
@@ -122,8 +123,13 @@ def _build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("report", help="Generate a QuantStats-style tearsheet for a run")
     r.add_argument("--run-id", required=True, help="Run id (e.g. returned by discover/validate)")
 
-    # placeholder subcommands referenced by docs:
-    sub.add_parser("replay", help="Phase 3 - NautilusTrader replay (M9; not yet implemented)")
+    n = sub.add_parser("replay", help="Phase 3 - NautilusTrader execution replay")
+    n.add_argument("--strategy", required=True, choices=sorted(REGISTRY))
+    n.add_argument("--cost", default="zero", help="Nautilus replay currently supports zero only")
+    n.add_argument("--capital", type=float, default=100_000)
+    n.add_argument("--days", type=int, default=252 * 3)
+    n.add_argument("--seed", type=int, default=42)
+    _add_data_options(n)
 
     return p
 
@@ -171,6 +177,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.cmd == "report":
         return _cmd_report(args)
+
+    if args.cmd == "replay":
+        return _cmd_replay(args)
 
     print(f"[stub] `{args.cmd}` is not implemented in v1", file=sys.stderr)
     return 2
@@ -282,6 +291,74 @@ def _cmd_report(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
     print(f"Report written to {html_path}")
+    return 0
+
+
+def _cmd_replay(args: argparse.Namespace) -> int:
+    factory, default_params = get_strategy(args.strategy)
+    spec = StrategySpec(
+        name=args.strategy,
+        signal_factory=factory,
+        cost_model=args.cost,
+        capital=args.capital,
+        universe_ref="synth",
+        params=default_params,
+    )
+    settings = resolve_settings()
+    data_root = args.data_root or settings.data_dir
+    universe_root = args.universe_root or settings.universe_dir
+    if args.synthetic:
+        ohlc = _synthetic_ohlc(symbol=args.symbol, days=args.days, seed=args.seed)
+        source_label = "synthetic"
+    else:
+        try:
+            ohlc = _clean_ohlc(
+                args.symbol,
+                data_root=data_root,
+                start=args.start,
+                end=args.end,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        spec.universe_ref = str(universe_root)
+        source_label = str(data_root / "clean")
+
+    run_id = f"bte-replay-{uuid.uuid4().hex[:8]}"
+    try:
+        result = run_spec(spec, ohlc, engine="nautilus", run_id=run_id)
+    except (RuntimeError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    symbol = str(ohlc.attrs.get("symbol", args.symbol)).upper()
+    result.metadata = {
+        "symbols": [symbol],
+        "date_range": {
+            "start": pd.Timestamp(ohlc.index[0]).isoformat(),
+            "end": pd.Timestamp(ohlc.index[-1]).isoformat(),
+        },
+        "data_source": source_label,
+        "data_root": str(data_root),
+        "universe_root": str(universe_root),
+        "requested_start": args.start,
+        "requested_end": args.end,
+        "synthetic": bool(args.synthetic),
+        "execution": {
+            "engine": result.engine,
+            "cost_model": result.cost_model,
+            "capital": result.capital,
+        },
+    }
+    metrics = attach_metric_panel(result)
+    report = render_report(
+        result,
+        make_report_config(run_id=result.run_id, outputs_dir=settings.outputs_dir),
+    )
+    print(f"Run id: {result.run_id}")
+    print(f"Engine: {result.engine}")
+    print(f"Data: {symbol} ({source_label})")
+    print(json.dumps({k: float(v) for k, v in metrics.items()}, indent=2))
+    print(f"Report written to {report.html_path}")
     return 0
 
 

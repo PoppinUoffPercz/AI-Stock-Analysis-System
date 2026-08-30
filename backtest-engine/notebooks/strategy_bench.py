@@ -207,7 +207,13 @@ def _trade_exposure(result, index: pd.Index) -> pd.Series:
     return exposure
 
 
-def run_permutation(spec: StrategySpec, ohlc: pd.DataFrame, *, n_trials: int = 500):
+def run_permutation(
+    spec: StrategySpec,
+    ohlc: pd.DataFrame,
+    *,
+    n_trials: int = 500,
+    max_resamples: int = 2_000,
+):
     signals = spec.make_signals(ohlc)
     exits = signals.get("exit", pd.Series(False, index=ohlc.index)).astype(bool)
 
@@ -244,7 +250,10 @@ def run_permutation(spec: StrategySpec, ohlc: pd.DataFrame, *, n_trials: int = 5
         )
 
     return random_entry_permutation(
-        signals["entry"], evaluator=evaluate, n_trials=n_trials
+        signals["entry"],
+        evaluator=evaluate,
+        n_trials=n_trials,
+        max_resamples=max_resamples,
     )
 
 
@@ -315,9 +324,11 @@ def main(strategy_name: str | None = None) -> int:
     print(f"  shuffled DD pctile 5:   {mc.max_dd_pctile_5:+.4f}")
     print(f"  shuffled DD pctile 95:  {mc.max_dd_pctile_95:+.4f}")
 
-    # 4) permutation
-    _print_header("PERMUTATION TEST (vs random-entry H0)")
-    perm = run_permutation(spec, ohlc)
+    # 4) permutation. A bounded first-year window keeps random-entry samples
+    # comparable when the full multi-year path has many completed trades.
+    _print_header("PERMUTATION TEST (vs random-entry H0; first year)")
+    permutation_ohlc = ohlc.iloc[:252]
+    perm = run_permutation(spec, permutation_ohlc)
     print(f"  real total_return:   {perm.real_metric:+.4f}")
     print(f"  random p-value:      {perm.p_value:.4f}  (lower is more significant)")
 

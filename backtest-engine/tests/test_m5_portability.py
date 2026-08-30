@@ -54,6 +54,9 @@ def test_get_adapter_known_and_unknown():
     assert a.name == "vectorbt"
     b = get_adapter("backtrader")
     assert b.name == "backtrader"
+    pytest.importorskip("nautilus_trader")
+    c = get_adapter("nautilus")
+    assert c.name == "nautilus"
     with pytest.raises(ValueError):
         get_adapter("rolex")
 
@@ -107,3 +110,24 @@ def test_cross_engine_identity_within_tolerance():
     # is purely mechanical (position-sizing rounding, fill timing) and is the
     # documented portability boundary from the plan.
     assert abs(vbt_tr - bt_tr) < 0.07, f"VBT total_return={vbt_tr:.4f} BT total_return={bt_tr:.4f}"
+
+
+@pytest.mark.smoke
+def test_nautilus_replay_preserves_the_shared_daily_fixture():
+    pytest.importorskip("nautilus_trader")
+    spec = StrategySpec(
+        name="sma_cross",
+        signal_factory=sma_cross,
+        cost_model="zero",
+        capital=100_000.0,
+        universe_ref="SYNTH",
+        params={"fast": 10, "slow": 50},
+    )
+    ohlc = _synth_ohlc(n=400, seed=3)
+    result = run_spec(spec, ohlc, engine="nautilus", run_id="x-nautilus")
+
+    assert result.engine == "nautilus"
+    assert result.params == spec.params
+    assert len(result.equity) == len(ohlc)
+    assert result.equity.index.equals(ohlc.index)
+    assert result.n_trades > 0

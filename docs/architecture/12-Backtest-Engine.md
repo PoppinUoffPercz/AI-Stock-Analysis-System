@@ -10,7 +10,7 @@ tags:
 
 # Backtest Engine — How to Test & Hypothesize Strategies
 
-> Three-phase framework in `./backtest-engine`: Phase 1 discovery (VectorBT) → Phase 2 validation (Backtrader event-driven, realistic fills/slippage) → Phase 3 replay (NautilusTrader, v2). All open-source, no paid data.
+> Three-phase framework in `./backtest-engine`: Phase 1 discovery (VectorBT) → Phase 2 validation (Backtrader event-driven, realistic fills/slippage) → optional Phase 3 daily-bar replay (NautilusTrader). All open-source, no paid data.
 
 See 12-Backtest-Engine for full design; this is the practical workflow guide.
 
@@ -76,10 +76,10 @@ def sma_cross(ohlc, params={"fast":10,"slow":30}):
 
 Run in order. Each gate is a filter — stop at the first failure.
 
-### Gate A — CLI smoke (zero cost, synthetic data)
+### Gate A — CLI smoke (zero cost, explicit synthetic data)
 
 ```bash
-bte discover --strategy <name> --days 200 --seed 42 --cost zero
+bte discover --strategy <name> --synthetic --days 200 --seed 42 --cost zero
 ```
 
 Expected: a JSON metrics block with `sharpe`, `total_return`, `profit_factor`, `max_drawdown`. Check `metrics/core.py` `bias_audit()` flags (`high_sharpe`, `too_smooth`, `thin_trades`, `low_wfe`). Any `True` = investigate before continuing.
@@ -87,7 +87,7 @@ Expected: a JSON metrics block with `sharpe`, `total_return`, `profit_factor`, `
 ### Gate B — Cost-sensitive validation (Backtrader, realistic execution)
 
 ```bash
-bte validate --strategy <name> --days 750 --seed 99 --cost us_equity_pershare
+bte validate --strategy <name> --symbol SPY --start 2020-01-01 --end 2024-12-31 --cost us_equity_pershare
 ```
 
 Compare VBT (`discover`) vs BT (`validate`) equity curves. A gap > 5% = execution/slippage issue; the framework expects some gap due to fill-timing differences but a large gap indicates the cost model doesn't match reality.
@@ -97,6 +97,14 @@ Compare VBT (`discover`) vs BT (`validate`) equity curves. A gap > 5% = executio
 ```bash
 PYTHONPATH=src python notebooks/strategy_bench.py <name>
 ```
+
+The notebook uses a deterministic synthetic scaffold for fast exploration. The real cached-data acceptance workflow is:
+
+```bash
+python -m scripts.run_v1_acceptance --start 2020-01-01 --end 2024-12-31
+```
+
+It runs a small SPY/QQQ/IWM sweep, the VBT/BT comparison, walk-forward, Monte Carlo, random-entry permutation, report generation, and optional Nautilus replay. Artifacts are written below `outputs/v1-acceptance/`.
 
 This runs: single run → walk-forward (rolling IS/OOS) → Monte Carlo (trade-order shuffle) → permutation vs random-entry H0 → verdict (`deploy? True/False`).
 
@@ -124,7 +132,9 @@ All data sources are free-tier only (plan §4 and M1):
 | Stooq (CSV download) | Bulk EOD cross-check | No SDK; manual format alignment |
 | Alpaca paper account | Backup minute bars (v2 / M9) | 200 calls/min; ~10yr 1m bars |
 
-Universe file (`data/universe/*.csv`) tracks `symbol`, `list_date`, `delist_date`, `delist_reason`. The loader (`data/universe.py`) drops delisted tickers after their `delist_date`, preventing look-ahead via dead-name persistence. The residual survivorship bias (only listed tickers have clean free data) is documented; upgrade to a paid point-in-time feed is the documented M9 path.
+Universe file (`data/universe/*.csv`) tracks `symbol`, `list_date`, `delist_date`, `delist_reason`. The loader (`data/universe.py`) drops delisted tickers after their `delist_date`, preventing look-ahead via dead-name persistence. The residual survivorship bias (only listed tickers have clean free data) is documented; upgrade to a paid point-in-time feed is the documented future path.
+
+The CLI reads persisted clean data by default from `data/clean/<SYMBOL>/<YEAR>.parquet`. Use `--synthetic` explicitly for an offline demo. Missing requested real data is an error; the CLI never silently replaces it with synthetic bars.
 
 ---
 
@@ -153,6 +163,9 @@ This framework directly connects to:
 | `tests/test_m6_validation.py` | Validation layer (walk-forward, MC, permutation, stability) |
 | `tests/test_m7_reporting.py` | Tearsheet + plotly + bias-audit |
 | `tests/test_m8_cli.py` | CLI end-to-end |
+| `src/backtest_engine/result.py` | Complete `BacktestResult` persistence and reload |
+| `src/backtest_engine/strategy/adapters/nautilus_adapter.py` | Optional NautilusTrader daily-bar replay boundary |
+| `scripts/run_v1_acceptance.py` | Reproducible cached-data acceptance run |
 | `PLAN.md` + `system-guide/12-Backtest-Engine.md` (this) | Design doc + usage guide |
 
 ---
@@ -164,11 +177,18 @@ This framework directly connects to:
 pip install -e ".[dev]"
 pre-commit install
 
-# Discover a strategy
-python -m backtest_engine.cli discover --strategy sma_cross --days 750 --cost us_equity_pershare --seed 99
+# Discover a strategy on persisted clean data
+python -m backtest_engine.cli discover --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
+
+# Explicit synthetic smoke run
+python -m backtest_engine.cli discover --strategy sma_cross --synthetic --days 750 --seed 99 --cost zero
 
 # Validate with realistic execution
-python -m backtest_engine.cli validate --strategy sma_cross --days 750 --seed 99
+python -m backtest_engine.cli validate --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31 --cost us_equity_pershare
+
+# Optional NautilusTrader daily-bar replay (zero-cost boundary)
+pip install -e ".[execution]"
+python -m backtest_engine.cli replay --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
 
 # List all registered strategies
 python -m backtest_engine.cli strats
@@ -177,7 +197,7 @@ python -m backtest_engine.cli strats
 python -m backtest_engine.cli report --run-id <id>
 
 # Full validation chain (discover -> WF -> MC -> perm -> verdict)
-python notebooks/strategy_bench.py <name>
+python -m scripts.run_v1_acceptance --start 2020-01-01 --end 2024-12-31
 
 # Check health of project
 ruff check src tests
@@ -185,6 +205,11 @@ ruff format --check src tests
 mypy --config-file=pyproject.toml src
 pytest -q
 ```
+
+The report command reloads the persisted `result.json` and does not rerun the
+strategy. Nautilus replay records native order/fill events; its daily equity
+series is reconstructed by marking those native fills to the identical
+canonical close bars, and the current boundary accepts only `--cost zero`.
 
 ---
 

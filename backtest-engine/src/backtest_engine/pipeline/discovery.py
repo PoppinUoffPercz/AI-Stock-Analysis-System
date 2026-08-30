@@ -19,13 +19,16 @@ from backtest_engine.strategy.spec import StrategySpec
 _ADAPTERS = {
     "vectorbt": VBTAdapter,
     "backtrader": BTAdapter,
-    # nautilus wired in M9
 }
 
 
 def get_adapter(name: str) -> EngineAdapter:
+    if name == "nautilus":
+        from backtest_engine.strategy.adapters.nautilus_adapter import NautilusAdapter
+
+        return NautilusAdapter()
     if name not in _ADAPTERS:
-        raise ValueError(f"unknown adapter: {name!r}; supported: {list(_ADAPTERS)}")
+        raise ValueError(f"unknown adapter: {name!r}; supported: {[*_ADAPTERS, 'nautilus']}")
     return _ADAPTERS[name]()
 
 

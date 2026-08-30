@@ -114,7 +114,7 @@ class EngineAdapter(Protocol):
 
 - **VBTAdapter** — wraps `vbt.Portfolio.from_signals`. Broadcasts parameter grids. Vectorized result (fast; optimistic on fills).
 - **BTAdapter** — wraps Backtrader's `Cerebro`. Custom `Broker` subclass injecting our `CostModel` and slippage. Custom `Analyzer` writing to `BacktestResult`. This is the realism gate.
-- **NautilusAdapter** (v2) — wraps `NautilusTrader`'s backtest node. Same `StrategySpec`, with limit/stop/TIF support. Pluggable toward the live node later.
+- **NautilusAdapter** (optional M9 boundary) — wraps `NautilusTrader`'s backtest engine for daily-bar replay. It uses the same `StrategySpec`; the current boundary supports the zero-cost model and is pluggable toward the live node later.
 
 ### 3.3 StrategySpec — the portability contract
 
@@ -186,7 +186,7 @@ Vectorized engines get these wrong; event-driven engines get them right. We own 
 
 ### 5.4 Latency / decision lag
 - v1: decisions at bar close, execution at next bar open. Documented and consistent across adapters.
-- v2 (Nautilus): configurable latency model.
+- M9 replay: configurable latency remains future work; the current adapter establishes the daily-bar replay boundary.
 
 ---
 
@@ -255,7 +255,7 @@ Vectorized engines get these wrong; event-driven engines get them right. We own 
 ### Phase 2 — Validation
 - `backtrader` (event-driven, mature, GPL; works on modern Python via maintained forks like `backtrader2`)
 
-### Phase 3 — Execution parity (v2; include in deps from start for consistency)
+### Phase 3 — Execution parity (optional M9 extra)
 - `nautilus_trader` (Rust-backed event-driven; contains a backtest node + live node)
 
 ### Data
@@ -336,10 +336,10 @@ Each milestone ships something runnable. Verify with `pytest` before moving on.
 - `bte discover|validate|replay|report` commands.
 - README; `strategies/` folder with 2 example strategies (SMA cross, RSI mean-reversion) each annotated with its hypothesis file.
 
-### M9 (v2 boundary) — Phase 3: NautilusTrader replay
-- `NautilusAdapter` for the same `StrategySpec`.
-- Compare Backtrader vs Nautilus on identical data → quantify execution-realism gap.
-- Define the paper/live integration path (broker TBD; Alpaca paper is the free option).
+### M9 — Phase 3: NautilusTrader replay boundary
+- `NautilusAdapter` for the same `StrategySpec`, loaded only when the optional `execution` extra is installed.
+- Replay canonical daily bars through native Nautilus order/fill events and reconstruct daily equity from those fills marked to canonical closes.
+- Compare Backtrader vs Nautilus on identical data → quantify the execution-realism gap. The current boundary supports zero-cost replay; realistic cost parity and paper/live integration remain future work.
 
 ---
 
@@ -356,15 +356,15 @@ Each milestone ships something runnable. Verify with `pytest` before moving on.
 ## 12. Definition of Done (v1)
 
 - [ ] Pull SPY + 50-ticker universe EOD 2010-2025 from free sources, cached locally.
-- [ ] Run an SMA-crossover param sweep in Phase 1 → `BacktestResult`.
+- [x] Run an SMA-crossover param sweep in Phase 1 → `BacktestResult` (demonstrated on the bounded SPY/QQQ/IWM cache for 2020-2024).
 - [ ] Run the same strategy through Phase 2 with realistic costs → equity within 2% of Phase 1 net of cost delta.
-- [ ] Run walk-forward (5 IS/OOS pairs) → stitched OOS equity + WFE.
+- [ ] Run walk-forward (5 IS/OOS pairs) → stitched OOS equity + WFE (the bounded cache currently provides one valid 3y/1y fold).
 - [ ] Run Monte Carlo (1000 shuffles) → 5/50/95 percentile DD bands.
-- [ ] Run permutation test → p-value vs random-entry H0.
-- [ ] Report tearsheet with bias-audit panel written to `outputs/`.
+- [x] Run permutation test (1000 trials) → p-value vs random-entry H0 (the acceptance artifact uses a fixed first-year window so resampling stays comparable).
+- [x] Report tearsheet with bias-audit panel written to `outputs/`.
 - [ ] `pytest` green, `ruff` clean, `mypy` clean.
 
-Once v1 is green, M9 opens the path to NautilusTrader replay and paper-trading integration.
+The acceptance run is reproducible with `python -m scripts.run_v1_acceptance` from `backtest-engine`. It uses the available 2020-01-01 through 2024-12-31 clean cache, so the original 2010-2025 and 50-ticker gates remain open. M9 replay is implemented as an optional zero-cost daily-bar boundary; paper/live integration is future work.
 
 ---
 

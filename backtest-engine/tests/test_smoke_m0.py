@@ -145,6 +145,15 @@ def test_repository_ci_and_optional_dependency_contract():
     assert "working-directory: backtest-engine" in workflow_text
     assert "mypy src" in workflow_text
     assert "|| true" not in workflow_text
+    for job in (
+        "optional-execution:",
+        "optional-broker:",
+        "optional-statistics:",
+        "optional-reporting:",
+    ):
+        assert job in workflow_text
+    for extra in (".[dev,execution]", ".[dev,broker]", ".[dev,statistics]", ".[dev,reporting]"):
+        assert extra in workflow_text
 
     with (package_root / "pyproject.toml").open("rb") as f:
         project = tomllib.load(f)["project"]

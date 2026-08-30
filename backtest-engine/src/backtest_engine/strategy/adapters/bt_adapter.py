@@ -179,6 +179,7 @@ class BTAdapter:
         sig_index = pd.DatetimeIndex(sig_naive.index)
         if sig_index.tz is not None:
             sig_naive.index = sig_index.tz_convert("UTC").tz_localize(None)
+        sig_naive.index = pd.DatetimeIndex(sig_naive.index).normalize()
 
         ohlc_naive = ohlc.copy()
         ohlc_index = pd.DatetimeIndex(ohlc_naive.index)

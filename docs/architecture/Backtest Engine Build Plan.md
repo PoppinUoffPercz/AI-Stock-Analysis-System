@@ -200,8 +200,8 @@ Vectorized engines get these wrong; event-driven engines get them right. We own 
 
 ### 6.2 Monte Carlo trade-order permutation
 - Take realized trade list; resample trade *order* (shuffle) 1,000–10,000x keeping the same trade distribution.
-- Report distribution of max drawdown, terminal wealth, Sharpe. The backtest's max-DD is the *one sample* — we want 5th/95th percentile.
-- Separately: block-bootstrap *returns* to preserve autocorrelation.
+- Report the distribution of max drawdown. Trade-order permutation cannot vary terminal wealth or Sharpe because both are order-invariant, so this method does not report them.
+- Use the separately named `bootstrap_trade_returns` operation when terminal-wealth or Sharpe distributions are required; `block_bootstrap_returns` remains the autocorrelation-preserving variant.
 
 ### 6.3 Permutation test vs H0
 - H0: "no edge — entries are random."

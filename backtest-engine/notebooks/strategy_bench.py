@@ -114,8 +114,19 @@ def run_walk_forward(
 # ---------------------------------------------------------------------------
 
 
-def run_monte_carlo(equity: pd.Series, *, n_trials: int = 500):
-    return shuffle_trade_order(equity, n_trials=n_trials, rng_seed=42)
+def run_monte_carlo(trade_returns: pd.Series, *, n_trials: int = 500):
+    return shuffle_trade_order(trade_returns, n_trials=n_trials, rng_seed=42)
+
+
+def _trade_returns(result) -> pd.Series:
+    returns = [
+        trade.exit_price / trade.fill_price - 1.0
+        for trade in result.trades
+        if trade.exit_timestamp is not None
+        and trade.exit_price is not None
+        and trade.fill_price > 0
+    ]
+    return pd.Series(returns, dtype="float64")
 
 
 def run_permutation(
@@ -191,8 +202,8 @@ def main(strategy_name: str | None = None) -> int:
     print(f"  WFE:             {wf.wfe:+.4f}  (>= 0.5 considered robust)")
 
     # 3) monte carlo
-    _print_header("MONTE CARLO (500 shuffles)")
-    mc = run_monte_carlo(res.equity)
+    _print_header("MONTE CARLO (500 trade-order shuffles; drawdown only)")
+    mc = run_monte_carlo(_trade_returns(res))
     realized_dd = float((res.equity / res.equity.cummax() - 1).min())
     print(f"  realized max-DD:        {realized_dd:+.4f}")
     print(f"  shuffled DD pctile 5:   {mc.max_dd_pctile_5:+.4f}")

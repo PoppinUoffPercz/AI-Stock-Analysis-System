@@ -9,6 +9,7 @@ import pytest
 from backtest_engine.metrics.core import total_return
 from backtest_engine.validation.monte_carlo import (
     block_bootstrap_returns,
+    bootstrap_trade_returns,
     shuffle_trade_order,
 )
 from backtest_engine.validation.permutation import random_entry_permutation
@@ -48,18 +49,18 @@ def _backtest_result_mock(equity: pd.Series, capital: float = 100.0):
 
 
 def test_montecarlo_returns_distribution_metrics():
-    eq = _equity(seed=1, n=300, drift=0.001, vol=0.008)
-    mc = shuffle_trade_order(eq, n_trials=200, rng_seed=42)
+    trade_returns = pd.Series([0.10, -0.05, 0.20, -0.10, 0.03])
+    mc = shuffle_trade_order(trade_returns, n_trials=200, rng_seed=42)
     assert mc.n_trials == 200
     assert len(mc.max_dd_pcts) == 200
+    assert np.unique(mc.max_dd_pcts).size > 1
     assert mc.max_dd_pctile_5 <= mc.max_dd_pctile_95
     assert -1.0 <= mc.max_dd_p_realized <= 1.0
 
 
-def test_montecarlo_handles_short_equity():
-    eq = pd.Series([100], index=pd.bdate_range("2020-01-01", periods=1).tz_localize("UTC"))
-    mc = shuffle_trade_order(eq)
-    assert mc.n_trials == 0  # too short to shuffle
+def test_montecarlo_handles_short_trade_returns():
+    mc = shuffle_trade_order(pd.Series([], dtype=float))
+    assert mc.n_trials == 0
 
 
 def test_block_bootstrap_returns_runnable():
@@ -68,6 +69,15 @@ def test_block_bootstrap_returns_runnable():
     bb = block_bootstrap_returns(r, block_size=10, n_trials=100, rng_seed=5)
     assert bb.n_trials == 100
     assert len(bb.terminal_wealth) == 100
+
+
+def test_bootstrap_trade_returns_changes_terminal_wealth_and_sharpe():
+    trade_returns = pd.Series([0.10, -0.05, 0.20, -0.10, 0.03, 0.01])
+
+    bootstrap = bootstrap_trade_returns(trade_returns, n_trials=200, rng_seed=42)
+
+    assert np.unique(bootstrap.terminal_wealth).size > 1
+    assert np.unique(bootstrap.sharpe_samples).size > 1
 
 
 # --- Permutation ----------------------------------------------------------

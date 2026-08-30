@@ -5,7 +5,8 @@
   2. Cross-checks against Stooq when available (warn only; flags > 0.5% disagreement).
   3. Validates via cleaner.
   4. Writes parquet partitions to `clean/`.
-  5. Records symbol boundary (first/last active date) for the universe layer.
+  5. Records symbol boundary (first/last active date) in the configured
+     universe root.
 """
 
 from __future__ import annotations
@@ -38,9 +39,10 @@ def ingest_symbol(
     start: str | None = None,
     end: str | None = None,
     clean_root: Path,
+    universe_root: Path,
     cross_check: bool = True,
-) -> tuple[int, Path]:
-    """Fetch, clean, write parquet. Returns (rows_written, boundary_file)."""
+) -> tuple[int, Path | None]:
+    """Fetch, clean, write parquet. Returns rows and an optional boundary file."""
     if source == SOURCE_YFINANCE:
         df = YFinanceSource().fetch(symbol, start=start, end=end)
     else:
@@ -48,7 +50,7 @@ def ingest_symbol(
 
     if df.empty:
         log.warning("no rows for %s via %s", symbol, source)
-        return 0, clean_root.parent.parent  # placeholder; never used when empty
+        return 0, None
 
     cleaned = validate_clean(df, source=source)
 
@@ -58,7 +60,7 @@ def ingest_symbol(
 
     written = write_clean(cleaned, clean_root, symbol=symbol, source=source)
     log.debug("wrote %d parquet partitions for %s", len(written), symbol)
-    return len(cleaned), _write_boundary(cleaned, clean_root, symbol)
+    return len(cleaned), _write_boundary(cleaned, clean_root, symbol, universe_root)
 
 
 def _cross_check_stooq(symbol: str, yf_df: pd.DataFrame) -> None:
@@ -84,11 +86,11 @@ def _cross_check_stooq(symbol: str, yf_df: pd.DataFrame) -> None:
         log.warning("%s: stooq/yfinance close disagreement max=%.2f%%", symbol, max_rel * 100)
 
 
-def _write_boundary(df: pd.DataFrame, clean_root: Path, symbol: str) -> Path:
+def _write_boundary(df: pd.DataFrame, clean_root: Path, symbol: str, universe_root: Path) -> Path:
     """Write the symbol's first/last active date to a sidecar boundary file."""
-    universe_dir = clean_root.parent.parent / "universe"
-    universe_dir.mkdir(parents=True, exist_ok=True)
-    bfile = universe_dir / f"{symbol.upper()}_boundary.csv"
+    universe_root = Path(universe_root)
+    universe_root.mkdir(parents=True, exist_ok=True)
+    bfile = universe_root / f"{symbol.upper()}_boundary.csv"
     timestamps = [df["timestamp"]]
     persisted = read_clean(clean_root, symbol)
     if not persisted.empty:

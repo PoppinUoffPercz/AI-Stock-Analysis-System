@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from backtest_engine.data.clean import CleanError, validate_clean
-from backtest_engine.data.ingest import _write_boundary
+from backtest_engine.data.ingest import _write_boundary, ingest_symbol
 from backtest_engine.data.sources.base import YFinanceSource
 from backtest_engine.data.store import CLEAN_COLUMNS, clean_path, read_clean, write_clean
 from backtest_engine.data.universe import Universe, write_spx_sample
@@ -190,14 +190,34 @@ def test_write_clean_failed_replacement_keeps_previous_partition(tmp_path, monke
 
 def test_write_boundary_preserves_full_history_on_incremental_update(tmp_path):
     clean_root = tmp_path / "data" / "clean"
+    universe_root = tmp_path / "custom-universe"
     older = _raw_frame(n=2, start="2020-01-01")
     newer = _raw_frame(n=2, start="2024-01-01")
-    _write_boundary(older, clean_root, "TEST")
-    boundary = _write_boundary(newer, clean_root, "TEST")
+    _write_boundary(older, clean_root, "TEST", universe_root)
+    boundary = _write_boundary(newer, clean_root, "TEST", universe_root)
 
+    assert boundary == universe_root / "TEST_boundary.csv"
     got = pd.read_csv(boundary)
     assert got.loc[0, "first_date"].startswith("2020-01-01")
     assert got.loc[0, "last_date"].startswith("2024-01-02")
+
+
+def test_empty_ingestion_returns_no_boundary(tmp_path, monkeypatch):
+    monkeypatch.setattr(YFinanceSource, "fetch", lambda self, symbol, **kwargs: pd.DataFrame())
+    clean_root = tmp_path / "data" / "clean"
+    universe_root = tmp_path / "data" / "universe"
+
+    rows, boundary = ingest_symbol(
+        "TEST",
+        source="yfinance",
+        clean_root=clean_root,
+        universe_root=universe_root,
+        cross_check=False,
+    )
+
+    assert rows == 0
+    assert boundary is None
+    assert not universe_root.exists()
 
 
 # ---------------------------------------------------------------------------

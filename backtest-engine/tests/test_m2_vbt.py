@@ -196,6 +196,48 @@ def test_vbt_adapter_runs_single_backtest():
 
 
 @pytest.mark.smoke
+def test_vbt_adapter_fills_signals_at_next_open_and_skips_final_bar():
+    pytest.importorskip("vectorbt")
+    idx = pd.date_range("2024-01-02", periods=4, freq="D", tz="UTC")
+    ohlc = pd.DataFrame(
+        {
+            "open": [101.0, 250.0, 303.0, 499.0],
+            "high": [110.0, 260.0, 310.0, 510.0],
+            "low": [99.0, 240.0, 295.0, 490.0],
+            "close": [10.0, 20.0, 30.0, 40.0],
+            "volume": [1000.0] * 4,
+        },
+        index=idx,
+    )
+    signals = pd.DataFrame(
+        {
+            "entry": [True, False, False, True],
+            "exit": [False, False, True, False],
+        },
+        index=idx,
+    )
+    ohlc.attrs["symbol"] = "TIMING"
+
+    result = VBTAdapter().run(
+        signals,
+        ohlc,
+        capital=1_000.0,
+        cost_model="zero",
+        strategy_name="timing",
+        universe_ref="TIMING",
+        params={},
+        run_id="timing",
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.timestamp == idx[1]
+    assert trade.fill_price == pytest.approx(250.0)
+    assert trade.exit_timestamp == idx[3]
+    assert trade.exit_price == pytest.approx(499.0)
+
+
+@pytest.mark.smoke
 def test_vbt_adapter_sweep_returns_one_result_per_combo():
     pytest.importorskip("vectorbt")
     ohlc = _synth_ohlc()

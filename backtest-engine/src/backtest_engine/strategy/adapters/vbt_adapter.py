@@ -14,7 +14,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from backtest_engine.strategy.result import BacktestResult
@@ -56,13 +55,19 @@ class VBTAdapter:
         self._vbt = vbt
 
         close = ohlc["close"]
+        open_price = ohlc["open"]
         # VBT expects signals indexed the same as price.
-        entries = signals["entry"].to_numpy()
-        exits = signals["exit"].to_numpy() if "exit" in signals.columns else None
+        # from_signals executes on the supplied price at the signal's bar, so
+        # shift observations one bar and use that bar's open for execution.
+        entries = signals["entry"].shift(1, fill_value=False).to_numpy()
+        exits = (
+            signals["exit"].shift(1, fill_value=False).to_numpy()
+            if "exit" in signals.columns
+            else None
+        )
 
-        # vbt.Portfolio.from_signals defaults to fill at next bar open if freq set
-        # to daily. We add a token commission to surface cost realism in Phase 1;
-        # CostModel from M3 will replace this with a structured estimate.
+        # `freq` controls time-based metrics; it does not shift fills. The
+        # explicit signal shift above is therefore part of the fill policy.
         from backtest_engine.execution.costs import (  # noqa: PLC0415 - lazy
             build_cost_funcs,
         )
@@ -73,6 +78,7 @@ class VBTAdapter:
             close,
             entries,
             exits,
+            price=open_price,
             init_cash=capital,
             freq="1D",
             upon_opposite_entry="Reverse",
@@ -88,7 +94,7 @@ class VBTAdapter:
         trades: list = []
         try:
             tr = pf.trades.records_readable
-            for row in tr.itertuples(index=False):
+            for _, row in tr.iterrows():
                 trades.append(_trade_record(row, ohlc, signals.index))
         except Exception:  # noqa: BLE001 - no trades is fine; vbt may return empty df
             trades = []
@@ -176,28 +182,25 @@ def _align_series(arr) -> pd.Series:
     return pd.Series(arr, dtype="float64")
 
 
-def _trade_record(row, ohlc: pd.DataFrame, idx: pd.Index):
+def _trade_record(row: pd.Series, ohlc: pd.DataFrame, idx: pd.Index):
     from backtest_engine.strategy.result import TradeRecord  # noqa: PLC0415 - lazy
 
     # row.entries/exits records_readable has fields like Avg Entry Price etc.
     # We extract the fields we depend on defensively; vbt's fields changed historically.
     def _get(*names: str) -> float | None:
         for nm in names:
-            if hasattr(row, nm):
-                val = getattr(row, nm)
-                if val is not None and not (isinstance(val, float) and np.isnan(val)):
-                    return float(val)
+            val = row.get(nm)
+            if val is not None and not pd.isna(val):
+                return float(val)
         return None
 
-    ts_idx = getattr(row, "Entry Index", None) if hasattr(row, "Entry Index") else None
-    ts = (
-        idx[int(ts_idx)]
-        if ts_idx is not None and ts_idx < len(idx)
-        else (idx[0] if len(idx) else pd.Timestamp.utcnow())
-    )
+    entry_ts = row.get("Entry Timestamp")
+    ts = pd.Timestamp(entry_ts) if entry_ts is not None and not pd.isna(entry_ts) else idx[0]
     sym = ohlc.attrs.get("symbol", "UNKNOWN")
     fill = _get("Avg Entry Price", "Entry Price") or 0.0
     qty = _get("Size") or 0.0
+    exit_ts = row.get("Exit Timestamp")
+    exit_timestamp = pd.Timestamp(exit_ts) if exit_ts is not None and not pd.isna(exit_ts) else None
     return TradeRecord(
         timestamp=pd.Timestamp(ts),
         symbol=sym,
@@ -206,4 +209,6 @@ def _trade_record(row, ohlc: pd.DataFrame, idx: pd.Index):
         fill_price=fill,
         commission=0.0,
         slippage_cost=0.0,
+        exit_timestamp=exit_timestamp,
+        exit_price=_get("Avg Exit Price", "Exit Price"),
     )

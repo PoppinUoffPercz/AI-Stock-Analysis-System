@@ -24,6 +24,8 @@ class TradeRecord:
     fill_price: float
     commission: float
     slippage_cost: float  # extra cost beyond midpoint (>= 0)
+    exit_timestamp: pd.Timestamp | None = None
+    exit_price: float | None = None
 
 
 @dataclass

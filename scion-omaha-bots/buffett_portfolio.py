@@ -241,6 +241,7 @@ class BuffettPortfolioManager:
             "shares": pos["shares"],
             "price": price,
             "proceeds": round(proceeds, 2),
+            "cost_basis": round(pos["cost_basis"], 2),
             "realized_pnl": round(realized_pnl, 2),
             "realized_pct": f"{realized_pct * 100:.1f}%",
             "reason": reason
@@ -254,6 +255,9 @@ class BuffettPortfolioManager:
             return {"action": "SKIP", "reason": "No shares to trim"}
 
         proceeds = shares_to_sell * price
+        cost_basis_sold = pos["cost_basis"] * shares_to_sell / pos["shares"]
+        realized_pnl = proceeds - cost_basis_sold
+        pos["cost_basis"] -= cost_basis_sold
         pos["shares"] -= shares_to_sell
         self.cash += proceeds
 
@@ -263,6 +267,8 @@ class BuffettPortfolioManager:
             "shares": shares_to_sell,
             "price": price,
             "proceeds": round(proceeds, 2),
+            "cost_basis": round(cost_basis_sold, 2),
+            "realized_pnl": round(realized_pnl, 2),
             "reason": reason,
             "timestamp": datetime.datetime.now().isoformat()
         }
@@ -276,6 +282,8 @@ class BuffettPortfolioManager:
             "shares_remaining": pos["shares"],
             "price": price,
             "proceeds": round(proceeds, 2),
+            "cost_basis": round(cost_basis_sold, 2),
+            "realized_pnl": round(realized_pnl, 2),
             "reason": reason
         }
 

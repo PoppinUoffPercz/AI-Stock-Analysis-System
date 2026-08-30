@@ -155,6 +155,12 @@ def test_repository_ci_and_optional_dependency_contract():
     for extra in (".[dev,execution]", ".[dev,broker]", ".[dev,statistics]", ".[dev,reporting]"):
         assert extra in workflow_text
 
+    statistics_job = workflow_text.split("  optional-statistics:", 1)[1].split(
+        "  optional-reporting:", 1
+    )[0]
+    assert 'python-version: "3.12"' in statistics_job
+    assert "import pandas_ta" in statistics_job
+
     with (package_root / "pyproject.toml").open("rb") as f:
         project = tomllib.load(f)["project"]
     core = project["dependencies"]
@@ -171,5 +177,6 @@ def test_repository_ci_and_optional_dependency_contract():
     assert any(dep.startswith("nautilus_trader") for dep in optional["execution"])
     assert any(dep.startswith("alpaca-py") for dep in optional["broker"])
     assert any(dep.startswith("scipy") for dep in optional["statistics"])
+    assert 'pandas-ta>=0.4.71b0; python_version >= "3.12"' in optional["statistics"]
     assert any(dep.startswith("quantstats") for dep in optional["reporting"])
     assert any(dep.startswith("pandas-stubs") for dep in optional["dev"])

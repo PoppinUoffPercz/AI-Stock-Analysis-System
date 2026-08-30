@@ -50,9 +50,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - run: python -m pip install -e ".[dev,statistics]"
-      - run: python -c "import scipy, sklearn, statsmodels; print(scipy.__version__, sklearn.__version__, statsmodels.__version__)"
+      - run: python -c "import pandas_ta, scipy, sklearn, statsmodels; print(pandas_ta.__version__, scipy.__version__, sklearn.__version__, statsmodels.__version__)"
       - run: pytest -q tests/test_m6_validation.py
 
   optional-reporting:

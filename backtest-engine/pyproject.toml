@@ -47,7 +47,7 @@ broker = [
   "alpaca-py>=0.20",
 ]
 statistics = [
-  "pandas-ta>=0.3.14b0",
+  "pandas-ta>=0.4.71b0; python_version >= \"3.12\"",
   "scipy>=1.11",
   "statsmodels>=0.14",
   "scikit-learn>=1.3",

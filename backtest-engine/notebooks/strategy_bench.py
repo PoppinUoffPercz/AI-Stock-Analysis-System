@@ -33,7 +33,7 @@ from backtest_engine.pipeline.discovery import run_spec
 from backtest_engine.strategy.registry import REGISTRY, get_strategy
 from backtest_engine.strategy.spec import StrategySpec
 from backtest_engine.validation.monte_carlo import shuffle_trade_order
-from backtest_engine.validation.permutation import random_entry_permutation
+from backtest_engine.validation.permutation import EntryEvaluation, random_entry_permutation
 from backtest_engine.validation.walk_forward import rolling_windows, walk_forward
 
 # ---------------------------------------------------------------------------
@@ -129,16 +129,57 @@ def _trade_returns(result) -> pd.Series:
     return pd.Series(returns, dtype="float64")
 
 
-def run_permutation(
-    ohlc: pd.DataFrame, real_entries: pd.Series, n_trades: int, *, n_trials: int = 500
-):
+def _trade_exposure(result, index: pd.Index) -> pd.Series:
+    exposure = pd.Series(0.0, index=index)
+    for trade in result.trades:
+        start = int(index.searchsorted(trade.timestamp))
+        stop = (
+            int(index.searchsorted(trade.exit_timestamp))
+            if trade.exit_timestamp is not None
+            else len(index)
+        )
+        exposure.iloc[start:stop] += 1.0
+    return exposure
+
+
+def run_permutation(spec: StrategySpec, ohlc: pd.DataFrame, *, n_trials: int = 500):
+    signals = spec.make_signals(ohlc)
+    exits = signals.get("exit", pd.Series(False, index=ohlc.index)).astype(bool)
+
+    def evaluate(candidate_entries: pd.Series) -> EntryEvaluation:
+        candidate_signals = pd.DataFrame(
+            {"entry": candidate_entries.astype(bool), "exit": exits}, index=ohlc.index
+        )
+
+        def candidate_factory(_bars: pd.DataFrame, _params: dict) -> pd.DataFrame:
+            return candidate_signals
+
+        candidate_spec = StrategySpec(
+            name=spec.name,
+            signal_factory=candidate_factory,
+            cost_model=spec.cost_model,
+            capital=spec.capital,
+            universe_ref=spec.universe_ref,
+            params=spec.params,
+        )
+        result = run_spec(
+            candidate_spec,
+            ohlc,
+            engine="vectorbt",
+            run_id="bench-permutation",
+        )
+        completed_trades = sum(
+            trade.exit_timestamp is not None and trade.exit_price is not None
+            for trade in result.trades
+        )
+        return EntryEvaluation(
+            metric=total_return(result.equity),
+            completed_trades=completed_trades,
+            exposure=_trade_exposure(result, ohlc.index),
+        )
+
     return random_entry_permutation(
-        ohlc["close"].pct_change().fillna(0.0),
-        real_entries,
-        metric_fn=lambda eq, r: total_return(eq),
-        n_entries=max(1, n_trades),
-        holding_period=1,
-        n_trials=n_trials,
+        signals["entry"], evaluator=evaluate, n_trials=n_trials
     )
 
 
@@ -211,8 +252,7 @@ def main(strategy_name: str | None = None) -> int:
 
     # 4) permutation
     _print_header("PERMUTATION TEST (vs random-entry H0)")
-    signals = spec.signal_factory(ohlc, spec.params)
-    perm = run_permutation(ohlc, signals["entry"], int(res.n_trades))
+    perm = run_permutation(spec, ohlc)
     print(f"  real total_return:   {perm.real_metric:+.4f}")
     print(f"  random p-value:      {perm.p_value:.4f}  (lower is more significant)")
 

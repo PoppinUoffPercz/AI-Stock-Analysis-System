@@ -7,12 +7,14 @@ import pandas as pd
 import pytest
 
 from backtest_engine.metrics.core import total_return
+from backtest_engine.pipeline.discovery import run_spec
+from backtest_engine.strategy.spec import StrategySpec
 from backtest_engine.validation.monte_carlo import (
     block_bootstrap_returns,
     bootstrap_trade_returns,
     shuffle_trade_order,
 )
-from backtest_engine.validation.permutation import random_entry_permutation
+from backtest_engine.validation.permutation import EntryEvaluation, random_entry_permutation
 from backtest_engine.validation.stability import build_metric_surface, param_drift
 from backtest_engine.validation.walk_forward import rolling_windows
 
@@ -83,111 +85,125 @@ def test_bootstrap_trade_returns_changes_terminal_wealth_and_sharpe():
 # --- Permutation ----------------------------------------------------------
 
 
-def test_permutation_p_value_in_unit_interval():
-    market_returns = pd.Series(
-        np.random.default_rng(0).normal(0.001, 0.01, 252),
-        index=pd.bdate_range("2020-01-01", periods=252).tz_localize("UTC"),
-    )
-    real_entries = pd.Series(False, index=market_returns.index)
-    real_entries.iloc[::25] = True
-    res = random_entry_permutation(
-        market_returns,
-        real_entries,
-        metric_fn=lambda eq, r: total_return(eq),
-        n_entries=10,
-        holding_period=1,
-        n_trials=100,
-        rng_seed=11,
-    )
-    assert 0.0 <= res.p_value <= 1.0
-    assert res.n_trials == 100
+def _single_position_evaluator(bar_returns: pd.Series, holding_period: int = 2):
+    """Evaluate next-bar entries with one long position and a fixed exit policy."""
+
+    def evaluate(entries: pd.Series):
+        exposure = np.zeros(len(entries), dtype="float64")
+        completed_trades = 0
+        occupied_until = -1
+        for signal_pos in np.flatnonzero(entries.to_numpy()):
+            fill_pos = int(signal_pos) + 1
+            if fill_pos >= len(entries) or fill_pos < occupied_until:
+                continue
+            exit_pos = fill_pos + holding_period
+            exposure[fill_pos : min(exit_pos, len(entries))] = 1.0
+            occupied_until = exit_pos
+            if exit_pos < len(entries):
+                completed_trades += 1
+        strategy_returns = bar_returns.to_numpy() * exposure
+        metric = float(np.prod(1.0 + strategy_returns) - 1.0)
+        return EntryEvaluation(
+            metric=metric,
+            completed_trades=completed_trades,
+            exposure=pd.Series(exposure, index=entries.index),
+        )
+
+    return evaluate
 
 
-def test_permutation_zero_entries_returns_unit_p():
-    market_returns = pd.Series(
-        [0.0, 0.01, 0.02], index=pd.bdate_range("2020-01-01", periods=3).tz_localize("UTC")
-    )
-    real_entries = pd.Series(False, index=market_returns.index)
-    res = random_entry_permutation(
-        market_returns,
-        real_entries,
-        metric_fn=lambda eq, r: 0.0,
-        n_entries=0,
-    )
-    assert res.p_value == 1.0
-    assert res.n_trials == 0
-
-
-def test_permutation_n_entries_changes_random_trials():
-    market_returns = pd.Series(
-        np.linspace(-0.01, 0.02, 40),
-        index=pd.bdate_range("2020-01-01", periods=40).tz_localize("UTC"),
-    )
-    real_entries = pd.Series(False, index=market_returns.index)
-    real_entries.iloc[[5, 15, 25]] = True
-    one = random_entry_permutation(
-        market_returns,
-        real_entries,
-        metric_fn=lambda eq, r: total_return(eq),
-        n_entries=1,
-        holding_period=2,
-        n_trials=50,
-        rng_seed=3,
-    )
-    three = random_entry_permutation(
-        market_returns,
-        real_entries,
-        metric_fn=lambda eq, r: total_return(eq),
-        n_entries=3,
-        holding_period=2,
-        n_trials=50,
-        rng_seed=3,
+def test_permutation_real_metric_matches_actual_benchmark_policy():
+    idx = pd.bdate_range("2020-01-01", periods=40).tz_localize("UTC")
+    close = pd.Series(np.linspace(100.0, 140.0, len(idx)), index=idx)
+    ohlc = pd.DataFrame(
+        {
+            "open": close.shift(1, fill_value=99.0) + 2.0,
+            "high": close + 3.0,
+            "low": close - 3.0,
+            "close": close,
+            "volume": 1_000_000.0,
+        },
+        index=idx,
     )
 
-    assert not np.allclose(one.random_metrics, three.random_metrics)
+    def scheduled_signals(bars: pd.DataFrame, _params: dict) -> pd.DataFrame:
+        signals = pd.DataFrame(False, index=bars.index, columns=["entry", "exit"])
+        signals.iloc[[1, 12, 24], signals.columns.get_loc("entry")] = True
+        signals.iloc[[7, 18, 30], signals.columns.get_loc("exit")] = True
+        return signals
+
+    spec = StrategySpec(name="scheduled", signal_factory=scheduled_signals, capital=10_000.0)
+    actual = run_spec(spec, ohlc, engine="vectorbt", run_id="actual")
+
+    from notebooks.strategy_bench import run_permutation
+
+    permutation = run_permutation(spec, ohlc, n_trials=20)
+
+    assert permutation.real_metric == pytest.approx(total_return(actual.equity))
 
 
-def test_permutation_detects_known_entry_edge_with_finite_sample_p_value():
-    idx = pd.bdate_range("2020-01-01", periods=100).tz_localize("UTC")
-    market_returns = pd.Series(0.0, index=idx)
+def test_permutation_samples_match_trade_count_without_leverage_and_are_seeded():
+    idx = pd.bdate_range("2020-01-01", periods=40).tz_localize("UTC")
+    bar_returns = pd.Series(np.linspace(-0.02, 0.03, len(idx)), index=idx)
     real_entries = pd.Series(False, index=idx)
-    real_entries.iloc[[10, 30, 50]] = True
-    market_returns.iloc[[11, 31, 51]] = 0.20
+    real_entries.iloc[[1, 10, 20]] = True
+    evaluator = _single_position_evaluator(bar_returns, holding_period=3)
 
-    res = random_entry_permutation(
-        market_returns,
+    first = random_entry_permutation(
         real_entries,
-        metric_fn=lambda eq, r: total_return(eq),
-        n_entries=3,
-        holding_period=1,
-        n_trials=500,
-        rng_seed=9,
+        evaluator=evaluator,
+        n_trials=50,
+        rng_seed=7,
+        max_resamples=200,
+    )
+    second = random_entry_permutation(
+        real_entries,
+        evaluator=evaluator,
+        n_trials=50,
+        rng_seed=7,
+        max_resamples=200,
     )
 
-    assert res.real_metric > 0.5
-    assert res.p_value == pytest.approx(1 / 501)
+    assert np.all(first.random_completed_trades == first.real_completed_trades)
+    assert np.all(first.random_max_exposures <= 1.0)
+    np.testing.assert_array_equal(first.random_metrics, second.random_metrics)
 
 
-def test_permutation_noise_is_not_systematically_significant():
-    idx = pd.bdate_range("2020-01-01", periods=252).tz_localize("UTC")
-    market_returns = pd.Series(np.random.default_rng(0).normal(0.0, 0.01, 252), index=idx)
+def test_permutation_final_bar_entry_remains_unfilled():
+    idx = pd.bdate_range("2020-01-01", periods=8).tz_localize("UTC")
     real_entries = pd.Series(False, index=idx)
-    real_entries.iloc[::25] = True
+    real_entries.iloc[-1] = True
+    evaluator = _single_position_evaluator(pd.Series(0.10, index=idx), holding_period=1)
 
-    p_values = [
+    result = random_entry_permutation(real_entries, evaluator=evaluator, n_trials=20)
+
+    assert result.real_completed_trades == 0
+    assert result.real_metric == 0.0
+    assert result.n_trials == 0
+
+
+def test_permutation_fails_when_comparable_sample_cannot_be_generated():
+    idx = pd.bdate_range("2020-01-01", periods=8).tz_localize("UTC")
+    real_entries = pd.Series(False, index=idx)
+    real_entries.iloc[1] = True
+    calls = 0
+
+    def evaluator(entries: pd.Series):
+        nonlocal calls
+        calls += 1
+        return EntryEvaluation(
+            metric=1.0 if calls == 1 else 0.0,
+            completed_trades=1 if calls == 1 else 0,
+            exposure=pd.Series(0.0, index=entries.index),
+        )
+
+    with pytest.raises(ValueError, match="comparable random-entry sample"):
         random_entry_permutation(
-            market_returns,
             real_entries,
-            metric_fn=lambda eq, r: total_return(eq),
-            n_entries=int(real_entries.sum()),
-            holding_period=1,
-            n_trials=300,
-            rng_seed=seed,
-        ).p_value
-        for seed in range(10)
-    ]
-
-    assert all(p > 0.05 for p in p_values)
+            evaluator=evaluator,
+            n_trials=1,
+            max_resamples=3,
+        )
 
 
 # --- Stability ------------------------------------------------------------

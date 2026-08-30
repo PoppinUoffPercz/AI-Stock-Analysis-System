@@ -36,8 +36,12 @@ class Universe:
         df = df.copy()
         df["symbol"] = df["symbol"].astype(str).str.upper()
         for c in ("list_date", "delist_date"):
-            df[c] = pd.to_datetime(df.get(c), utc=True, errors="coerce")  # type: ignore[call-overload]
-        df["delist_reason"] = df.get("delist_reason", "").astype(str)  # type: ignore[union-attr]
+            values = df[c] if c in df.columns else pd.Series(pd.NaT, index=df.index)
+            df[c] = pd.to_datetime(values, utc=True, errors="coerce")
+        if "delist_reason" in df.columns:
+            df["delist_reason"] = df["delist_reason"].astype(str)
+        else:
+            df["delist_reason"] = ""
         self._df = df
 
     @classmethod

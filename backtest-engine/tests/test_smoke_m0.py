@@ -163,3 +163,4 @@ def test_repository_ci_and_optional_dependency_contract():
     assert any(dep.startswith("alpaca-py") for dep in optional["broker"])
     assert any(dep.startswith("scipy") for dep in optional["statistics"])
     assert any(dep.startswith("quantstats") for dep in optional["reporting"])
+    assert any(dep.startswith("pandas-stubs") for dep in optional["dev"])

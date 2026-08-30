@@ -36,6 +36,7 @@ dev = [
   "hypothesis>=6.100",
   "ruff>=0.5",
   "mypy>=1.10",
+  "pandas-stubs>=2.3.3,<3",
   "types-requests>=2.31",
   "pre-commit>=3.6",
 ]

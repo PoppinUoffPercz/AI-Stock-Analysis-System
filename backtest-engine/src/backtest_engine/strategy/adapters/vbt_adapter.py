@@ -176,8 +176,10 @@ def _align_series(arr) -> pd.Series:
     """Convert vbt's index to tz-aware UTC if needed."""
     if isinstance(arr, pd.Series):
         s = arr.astype("float64").copy()
-        if s.index.tz is None:  # type: ignore[attr-defined]
-            s.index = s.index.tz_localize("UTC")  # type: ignore[attr-defined]
+        index = pd.DatetimeIndex(s.index)
+        if index.tz is None:
+            index = index.tz_localize("UTC")
+        s.index = index
         return s
     # ndarray fallback
     return pd.Series(arr, dtype="float64")

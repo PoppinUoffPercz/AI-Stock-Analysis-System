@@ -100,11 +100,11 @@ class YFinanceSource(Source):
     def _normalize(df: pd.DataFrame) -> pd.DataFrame:
         # yfinance index is tz-aware NYSE time; convert to UTC.
         df = df.copy()
-        idx = df.index
-        if getattr(idx, "tz", None) is not None:
-            df.index = idx.tz_convert("UTC")  # type: ignore[attr-defined]
+        idx = pd.DatetimeIndex(df.index)
+        if idx.tz is not None:
+            df.index = idx.tz_convert("UTC")
         else:
-            df.index = idx.tz_localize("UTC")  # type: ignore[attr-defined]
+            df.index = idx.tz_localize("UTC")
         df.index.name = "timestamp"
         df = df.reset_index()
 
@@ -247,7 +247,7 @@ class StooqSource(Source):
         df = pd.DataFrame(rows)
         df["timestamp"] = pd.to_datetime(df["Date"], utc=True)
         for c in ("Open", "High", "Low", "Close", "Volume"):
-            df[c] = pd.to_numeric(df.get(c), errors="coerce")  # type: ignore[call-overload]
+            df[c] = pd.to_numeric(df[c], errors="coerce")
         out = pd.DataFrame()
         out["timestamp"] = df["timestamp"]
         out["open"] = df["Open"].astype("float64")

@@ -176,12 +176,14 @@ class BTAdapter:
         """Execute one backtest through Cerebro and emit a canonical BacktestResult."""
         # Strip tz from signals index (Backtrader prefers naive datetimes).
         sig_naive = signals.copy()
-        if sig_naive.index.tz is not None:  # type: ignore[attr-defined]
-            sig_naive.index = sig_naive.index.tz_convert("UTC").tz_localize(None)  # type: ignore[attr-defined]
+        sig_index = pd.DatetimeIndex(sig_naive.index)
+        if sig_index.tz is not None:
+            sig_naive.index = sig_index.tz_convert("UTC").tz_localize(None)
 
         ohlc_naive = ohlc.copy()
-        if ohlc_naive.index.tz is not None:  # type: ignore[attr-defined]
-            ohlc_naive.index = ohlc_naive.index.tz_convert("UTC").tz_localize(None)  # type: ignore[attr-defined]
+        ohlc_index = pd.DatetimeIndex(ohlc_naive.index)
+        if ohlc_index.tz is not None:
+            ohlc_naive.index = ohlc_index.tz_convert("UTC").tz_localize(None)
 
         feed = bt.feeds.PandasData(
             dataname=ohlc_naive[["open", "high", "low", "close", "volume"]],

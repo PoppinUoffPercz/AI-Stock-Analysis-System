@@ -161,10 +161,6 @@ class BTAdapter:
 
     name = "backtrader"
 
-    def __init__(self):
-        # We defer construction of Cerebro to run() so the adapter is reusable.
-        pass
-
     def run(
         self,
         signals: pd.DataFrame,
@@ -251,9 +247,4 @@ class BTAdapter:
             equity=equity,
             returns=returns,
             trades=trade_log,
-        )
-
-    def sweep(self, *args, **kw) -> list[BacktestResult]:
-        raise NotImplementedError(
-            "BTAdapter.sweep: vectorized sweep not supported; use VBTAdapter."
         )

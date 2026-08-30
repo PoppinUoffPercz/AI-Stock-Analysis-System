@@ -14,8 +14,12 @@ import pytest
 
 from backtest_engine.metrics.core import total_return
 from backtest_engine.pipeline.discovery import get_adapter, run_spec
+from backtest_engine.strategy.adapters.bt_adapter import BTAdapter
+from backtest_engine.strategy.adapters.vbt_adapter import VBTAdapter
+from backtest_engine.strategy.base import EngineAdapter
 from backtest_engine.strategy.builtin import sma_cross
-from backtest_engine.strategy.spec import StrategySpec
+from backtest_engine.strategy.registry import SignalFactory as RegistrySignalFactory
+from backtest_engine.strategy.spec import SignalFactory, StrategySpec
 
 
 def _synth_ohlc(n: int = 300, start: str = "2018-01-02", seed: int = 7) -> pd.DataFrame:
@@ -36,6 +40,13 @@ def _synth_ohlc(n: int = 300, start: str = "2018-01-02", seed: int = 7) -> pd.Da
     out.index.name = "timestamp"
     out.attrs["symbol"] = "SYNTH"
     return out
+
+
+def test_sweep_belongs_only_to_vectorbt_and_signal_type_is_canonical():
+    assert hasattr(VBTAdapter, "sweep")
+    assert not hasattr(BTAdapter, "sweep")
+    assert not hasattr(EngineAdapter, "sweep")
+    assert RegistrySignalFactory is SignalFactory
 
 
 def test_get_adapter_known_and_unknown():

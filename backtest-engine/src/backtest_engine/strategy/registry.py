@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
-import pandas as pd
-
 from backtest_engine.strategy.bollinger import bollinger_breakout
 from backtest_engine.strategy.builtin import sma_cross
 from backtest_engine.strategy.rsi_reversion import rsi_reversion
-
-SignalFactory = Callable[[pd.DataFrame, dict], pd.DataFrame]
+from backtest_engine.strategy.spec import SignalFactory
 
 REGISTRY: dict[str, tuple[SignalFactory, dict]] = {
     "sma_cross": (sma_cross, {"fast": 10, "slow": 30}),

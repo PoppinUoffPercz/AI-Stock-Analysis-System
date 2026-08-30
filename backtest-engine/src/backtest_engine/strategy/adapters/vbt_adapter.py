@@ -17,6 +17,7 @@ from typing import Any
 import pandas as pd
 
 from backtest_engine.strategy.result import BacktestResult
+from backtest_engine.strategy.spec import SignalFactory
 
 
 def _import_vbt():
@@ -121,7 +122,7 @@ class VBTAdapter:
 
     def sweep(
         self,
-        signal_factory,
+        signal_factory: SignalFactory,
         ohlc: pd.DataFrame,
         *,
         param_grid: dict[str, list[Any]],

@@ -130,3 +130,36 @@ def test_pyproject_toml_present_and_parses():
         data = tomllib.load(f)
     assert data["project"]["name"] == "backtest-engine"
     assert "bte" in data["project"]["scripts"]
+
+
+def test_repository_ci_and_optional_dependency_contract():
+    import tomllib
+
+    package_root = Path(__file__).resolve().parent.parent
+    repository_root = package_root.parent
+    workflow = repository_root / ".github" / "workflows" / "backtest-engine-ci.yml"
+    assert workflow.is_file()
+    assert not (package_root / ".github" / "workflows" / "ci.yml").exists()
+
+    workflow_text = workflow.read_text(encoding="utf-8")
+    assert "working-directory: backtest-engine" in workflow_text
+    assert "mypy src" in workflow_text
+    assert "|| true" not in workflow_text
+
+    with (package_root / "pyproject.toml").open("rb") as f:
+        project = tomllib.load(f)["project"]
+    core = project["dependencies"]
+    optional = project["optional-dependencies"]
+
+    assert not any(dep.startswith("nautilus_trader") for dep in core)
+    assert not any(dep.startswith("alpaca-py") for dep in core)
+    assert not any(
+        dep.startswith(name) for dep in core for name in ("scipy", "statsmodels", "scikit-learn")
+    )
+    assert not any(
+        dep.startswith(name) for dep in core for name in ("quantstats", "plotly", "matplotlib")
+    )
+    assert any(dep.startswith("nautilus_trader") for dep in optional["execution"])
+    assert any(dep.startswith("alpaca-py") for dep in optional["broker"])
+    assert any(dep.startswith("scipy") for dep in optional["statistics"])
+    assert any(dep.startswith("quantstats") for dep in optional["reporting"])

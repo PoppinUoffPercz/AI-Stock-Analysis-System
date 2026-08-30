@@ -170,18 +170,18 @@ def test_repository_ci_and_optional_dependency_contract():
     core = project["dependencies"]
     optional = project["optional-dependencies"]
 
+    assert "vectorbt>=0.26" in core
+    assert "plotly>=5.0.0,<5.14.0" in core
     assert not any(dep.startswith("nautilus_trader") for dep in core)
     assert not any(dep.startswith("alpaca-py") for dep in core)
     assert not any(
         dep.startswith(name) for dep in core for name in ("scipy", "statsmodels", "scikit-learn")
     )
-    assert not any(
-        dep.startswith(name) for dep in core for name in ("quantstats", "plotly", "matplotlib")
-    )
+    assert not any(dep.startswith(name) for dep in core for name in ("quantstats", "matplotlib"))
     assert any(dep.startswith("nautilus_trader") for dep in optional["execution"])
     assert any(dep.startswith("alpaca-py") for dep in optional["broker"])
     assert any(dep.startswith("scipy") for dep in optional["statistics"])
     assert 'pandas-ta>=0.4.71b0; python_version >= "3.12"' in optional["statistics"]
     assert any(dep.startswith("quantstats") for dep in optional["reporting"])
-    assert "plotly>=5.0.0,<5.14.0" in optional["reporting"]
+    assert not any(dep.startswith("plotly") for dep in optional["reporting"])
     assert any(dep.startswith("pandas-stubs") for dep in optional["dev"])

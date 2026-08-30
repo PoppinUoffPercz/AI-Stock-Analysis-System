@@ -7,6 +7,8 @@ up in `clean/` follows the schema enforced here.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 from typing import Final
 
@@ -49,7 +51,7 @@ def write_clean(
     from backtest_engine.data.clean import validate_clean
 
     df = validate_clean(df, source=source)
-    # Defensive copy so we don't mutate caller's frame
+    # Defensive copy so we don't mutate caller's frame.
     df = df.copy()
     df["source"] = source
 
@@ -57,9 +59,25 @@ def write_clean(
     for year, group in df.groupby(df["timestamp"].dt.year, sort=True):
         out = clean_path(root, symbol, int(year))
         out.parent.mkdir(parents=True, exist_ok=True)
-        group.sort_values("timestamp", inplace=True)
-        group.reset_index(drop=True, inplace=True)
-        group.to_parquet(out, index=False)
+        incoming = group.sort_values("timestamp").reset_index(drop=True)
+        if out.exists():
+            existing = pd.read_parquet(out)
+            merged = pd.concat([existing, incoming], ignore_index=True)
+        else:
+            merged = incoming
+        merged = merged.drop_duplicates(subset="timestamp", keep="last")
+        merged = (
+            validate_clean(merged, source=source).sort_values("timestamp").reset_index(drop=True)
+        )
+
+        fd, temp_name = tempfile.mkstemp(prefix=f".{out.stem}.", suffix=".tmp", dir=out.parent)
+        os.close(fd)
+        temp = Path(temp_name)
+        try:
+            merged.to_parquet(temp, index=False)
+            os.replace(temp, out)
+        finally:
+            temp.unlink(missing_ok=True)
         written.append(out)
     return written
 

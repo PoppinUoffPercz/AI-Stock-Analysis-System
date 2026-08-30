@@ -22,7 +22,7 @@ from backtest_engine.data.sources.base import (
     StooqSource,
     YFinanceSource,
 )
-from backtest_engine.data.store import write_clean
+from backtest_engine.data.store import read_clean, write_clean
 
 log = logging.getLogger(__name__)
 
@@ -89,8 +89,20 @@ def _write_boundary(df: pd.DataFrame, clean_root: Path, symbol: str) -> Path:
     universe_dir = clean_root.parent.parent / "universe"
     universe_dir.mkdir(parents=True, exist_ok=True)
     bfile = universe_dir / f"{symbol.upper()}_boundary.csv"
-    first = df["timestamp"].min()
-    last = df["timestamp"].max()
+    timestamps = [df["timestamp"]]
+    persisted = read_clean(clean_root, symbol)
+    if not persisted.empty:
+        timestamps.append(persisted["timestamp"])
+    if bfile.exists():
+        prior = pd.read_csv(bfile)
+        timestamps.extend(
+            pd.to_datetime(prior[column], utc=True)
+            for column in ("first_date", "last_date")
+            if column in prior
+        )
+    all_timestamps = pd.concat(timestamps, ignore_index=True).dropna()
+    first = all_timestamps.min()
+    last = all_timestamps.max()
     pd.DataFrame([{"symbol": symbol.upper(), "first_date": first, "last_date": last}]).to_csv(
         bfile, index=False
     )

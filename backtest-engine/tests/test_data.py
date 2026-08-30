@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from backtest_engine.data.clean import CleanError, validate_clean
+from backtest_engine.data.ingest import _write_boundary
 from backtest_engine.data.sources.base import YFinanceSource
 from backtest_engine.data.store import CLEAN_COLUMNS, clean_path, read_clean, write_clean
 from backtest_engine.data.universe import Universe, write_spx_sample
@@ -148,6 +149,55 @@ def test_read_clean_missing_symbol_returns_empty(tmp_path):
 def test_clean_path_canonical():
     p = clean_path(Path("clean"), "aapl", 2024)
     assert p.as_posix().replace("\\", "/") == "clean/AAPL/2024.parquet"
+
+
+def test_write_clean_merges_incremental_rows_and_incoming_wins(tmp_path):
+    root = tmp_path / "clean"
+    first = _raw_frame(n=2, start="2024-01-01")
+    second = _raw_frame(n=2, start="2024-01-03")
+    correction = second.iloc[[0]].copy()
+    correction["close"] = 100.0
+    correction["adj_close"] = 100.0
+
+    write_clean(first, root, symbol="TEST", source="first")
+    write_clean(second, root, symbol="TEST", source="second")
+    write_clean(correction, root, symbol="TEST", source="correction")
+
+    got = read_clean(root, "TEST")
+    assert len(got) == 4
+    assert got.loc[got["timestamp"] == second.loc[0, "timestamp"], "close"].iloc[0] == 100.0
+    assert got.loc[got["timestamp"] == first.loc[0, "timestamp"], "source"].iloc[0] == "first"
+
+
+def test_write_clean_failed_replacement_keeps_previous_partition(tmp_path, monkeypatch):
+    root = tmp_path / "clean"
+    original = _raw_frame(n=2, start="2024-01-01")
+    write_clean(original, root, symbol="TEST", source="original")
+    replacement = _raw_frame(n=2, start="2024-01-03")
+    original_to_parquet = pd.DataFrame.to_parquet
+
+    def fail_to_parquet(self, *args, **kwargs):
+        original_to_parquet(self, *args, **kwargs)
+        raise OSError("simulated parquet failure")
+
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", fail_to_parquet)
+    with pytest.raises(OSError, match="simulated parquet failure"):
+        write_clean(replacement, root, symbol="TEST", source="replacement")
+
+    got = read_clean(root, "TEST")
+    assert got["timestamp"].tolist() == original["timestamp"].tolist()
+
+
+def test_write_boundary_preserves_full_history_on_incremental_update(tmp_path):
+    clean_root = tmp_path / "data" / "clean"
+    older = _raw_frame(n=2, start="2020-01-01")
+    newer = _raw_frame(n=2, start="2024-01-01")
+    _write_boundary(older, clean_root, "TEST")
+    boundary = _write_boundary(newer, clean_root, "TEST")
+
+    got = pd.read_csv(boundary)
+    assert got.loc[0, "first_date"].startswith("2020-01-01")
+    assert got.loc[0, "last_date"].startswith("2024-01-02")
 
 
 # ---------------------------------------------------------------------------

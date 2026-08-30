@@ -57,7 +57,6 @@ This project is assembled from the live source projects and the model-facing fra
 | `backtest-engine/src/backtest_engine/strategy/registry.py` | 0.9 KB |
 | `backtest-engine/src/backtest_engine/strategy/result.py` | 1.5 KB |
 | `backtest-engine/src/backtest_engine/strategy/rsi_reversion.py` | 1 KB |
-| `backtest-engine/src/backtest_engine/strategy/signals.py` | 0.8 KB |
 | `backtest-engine/src/backtest_engine/strategy/spec.py` | 1.4 KB |
 | `backtest-engine/src/backtest_engine/validation/__init__.py` | 0 KB |
 | `backtest-engine/src/backtest_engine/validation/monte_carlo.py` | 4.7 KB |

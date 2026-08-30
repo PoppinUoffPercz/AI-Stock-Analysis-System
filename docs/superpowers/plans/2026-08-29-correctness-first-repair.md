@@ -19,18 +19,18 @@
 
 ## Task Checklist
 
-- [ ] Task 1: Enforce VectorBT next-open fills; assert exact timestamps/prices; commit `fix: enforce next-open vectorbt fills`.
-- [ ] Task 2: Record only completed Backtrader fills; commit `fix: record completed backtrader fills only`.
-- [ ] Task 3: Charge Backtrader execution costs through broker accounting; commit `fix: charge execution costs in backtrader`.
-- [ ] Task 4: Normalize yfinance corporate actions and adjusted OHLC safely; commit `fix: normalize corporate actions correctly`.
-- [ ] Task 5: Implement genuine deterministic random-entry testing with finite-sample p-values; commit `fix: implement genuine random-entry testing`.
-- [ ] Task 6: Separate trade-order permutation from bootstrap statistics; commit `fix: align monte carlo methods with reported statistics`.
-- [ ] Task 7: Merge incremental partitions and atomically replace validated files; commit `fix: merge incremental data partitions atomically`.
-- [ ] Task 8a: Preserve Scion partial-exit cost basis and test it; commit `fix: preserve scion cost basis after scale-out`.
-- [ ] Task 8b: Preserve Omaha partial-exit cost basis and test it; commit `fix: preserve omaha cost basis after trim`.
-- [ ] Task 9: Persist run artifacts and make immediate report lookup work; commit `fix: persist backtest run artifacts`.
-- [ ] Task 10: Reuse one listing/delisting membership predicate; commit `fix: enforce point-in-time universe membership`.
-- [ ] Task 11: Delete only proven-unused backtest surfaces after all behavioral work is green; commit `refactor: remove unused backtest surfaces`.
+- [x] Task 1: Enforce VectorBT next-open fills; assert exact timestamps/prices; commit `fix: enforce next-open vectorbt fills`.
+- [x] Task 2: Record only completed Backtrader fills; commit `fix: record completed backtrader fills only`.
+- [x] Task 3: Charge Backtrader execution costs through broker accounting; commit `fix: charge execution costs in backtrader`.
+- [x] Task 4: Normalize yfinance corporate actions and adjusted OHLC safely; commit `fix: normalize corporate actions correctly`.
+- [x] Task 5: Implement genuine deterministic random-entry testing with finite-sample p-values; commit `fix: implement genuine random-entry testing`.
+- [x] Task 6: Separate trade-order permutation from bootstrap statistics; commit `fix: align monte carlo methods with reported statistics`.
+- [x] Task 7: Merge incremental partitions and atomically replace validated files; commit `fix: merge incremental data partitions atomically`.
+- [x] Task 8a: Preserve Scion partial-exit cost basis and test it; commit `fix: preserve scion cost basis after scale-out`.
+- [x] Task 8b: Preserve Omaha partial-exit cost basis and test it; commit `fix: preserve omaha cost basis after trim`.
+- [x] Task 9: Persist run artifacts and make immediate report lookup work; commit `fix: persist backtest run artifacts`.
+- [x] Task 10: Reuse one listing/delisting membership predicate; commit `fix: enforce point-in-time universe membership`.
+- [x] Task 11: Delete only proven-unused backtest surfaces after all behavioral work is green; commit `refactor: remove unused backtest surfaces`.
 
 ## Per-Task Gate
 

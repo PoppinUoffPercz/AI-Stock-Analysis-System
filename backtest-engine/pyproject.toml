@@ -54,7 +54,7 @@ statistics = [
 ]
 reporting = [
   "quantstats>=0.0.62",
-  "plotly>=5.18",
+  "plotly>=5.0.0,<5.14.0",
   "matplotlib>=3.8",
 ]
 

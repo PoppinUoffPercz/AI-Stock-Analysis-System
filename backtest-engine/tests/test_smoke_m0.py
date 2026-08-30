@@ -160,6 +160,10 @@ def test_repository_ci_and_optional_dependency_contract():
     )[0]
     assert 'python-version: "3.12"' in statistics_job
     assert "import pandas_ta" in statistics_job
+    assert "pandas_ta.__version__" not in statistics_job
+    assert (
+        "print(scipy.__version__, sklearn.__version__, statsmodels.__version__)" in statistics_job
+    )
 
     with (package_root / "pyproject.toml").open("rb") as f:
         project = tomllib.load(f)["project"]
@@ -179,4 +183,5 @@ def test_repository_ci_and_optional_dependency_contract():
     assert any(dep.startswith("scipy") for dep in optional["statistics"])
     assert 'pandas-ta>=0.4.71b0; python_version >= "3.12"' in optional["statistics"]
     assert any(dep.startswith("quantstats") for dep in optional["reporting"])
+    assert "plotly>=5.0.0,<5.14.0" in optional["reporting"]
     assert any(dep.startswith("pandas-stubs") for dep in optional["dev"])

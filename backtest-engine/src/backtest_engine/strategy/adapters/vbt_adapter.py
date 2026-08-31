@@ -18,6 +18,7 @@ import pandas as pd
 
 from backtest_engine.strategy.result import BacktestResult
 from backtest_engine.strategy.spec import SignalFactory
+from backtest_engine.strategy.validation import validate_signal_frame
 
 
 def _import_vbt():
@@ -49,9 +50,10 @@ class VBTAdapter:
     ) -> BacktestResult:
         """Execute a single backtest from pre-computed entry/exit signals.
 
-        `signals` must have either `entry` and `exit` boolean columns aligned
-        with `ohlc`'s index, or a single `signals`/`positions` signed column.
+        `signals` must have an `entry` boolean column and may have an `exit`
+        boolean column. Both must be aligned with `ohlc`'s index.
         """
+        signals = validate_signal_frame(signals, ohlc)
         vbt = self._vbt or _import_vbt()
         self._vbt = vbt
 

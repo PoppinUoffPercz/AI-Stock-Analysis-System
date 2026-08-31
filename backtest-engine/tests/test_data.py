@@ -75,6 +75,18 @@ def test_validate_clean_dedupes_duplicate_timestamps():
     dup = pd.concat([raw, raw.iloc[:1]], ignore_index=True)  # duplicate of row 0
     out = validate_clean(dup, source="test")
     assert out["timestamp"].is_unique
+    assert len(out) == len(raw)
+
+
+def test_validate_clean_rejects_conflicting_duplicate_timestamps():
+    raw = _raw_frame()
+    conflict = raw.iloc[[0]].copy()
+    conflict["close"] = conflict["close"] + 1.0
+    conflict["adj_close"] = conflict["adj_close"] + 1.0
+    duplicated = pd.concat([raw, conflict], ignore_index=True)
+
+    with pytest.raises(CleanError, match="conflicting duplicate timestamp"):
+        validate_clean(duplicated, source="test")
 
 
 def test_validate_clean_rejects_negative_volume():
@@ -119,7 +131,7 @@ def test_validate_clean_rejects_missing_required_column():
 
 def test_write_clean_partitions_by_year(tmp_path):
     df = pd.concat(
-        [_raw_frame(n=10, start="2023-12-25"), _raw_frame(n=10, start="2024-01-01")],
+        [_raw_frame(n=7, start="2023-12-25"), _raw_frame(n=10, start="2024-01-03")],
         ignore_index=True,
     )
     paths = write_clean(df, tmp_path / "clean", symbol="TEST", source="test")

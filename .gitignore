@@ -10,6 +10,7 @@ __pycache__/
 .hypothesis/
 .superpowers/
 .pytest-tmp-*/
+.pytest-task*/
 .coverage
 htmlcov/
 .ipynb_checkpoints/

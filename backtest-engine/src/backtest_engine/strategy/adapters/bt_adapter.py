@@ -24,6 +24,7 @@ import pandas as pd
 
 from backtest_engine.execution.costs import get_preset
 from backtest_engine.strategy.result import BacktestResult, TradeRecord
+from backtest_engine.strategy.validation import validate_signal_frame
 
 
 class _SignalDrivenStrategy(bt.Strategy):
@@ -174,6 +175,7 @@ class BTAdapter:
         run_id: str | None = None,
     ) -> BacktestResult:
         """Execute one backtest through Cerebro and emit a canonical BacktestResult."""
+        signals = validate_signal_frame(signals, ohlc)
         # Strip tz from signals index (Backtrader prefers naive datetimes).
         sig_naive = signals.copy()
         sig_index = pd.DatetimeIndex(sig_naive.index)

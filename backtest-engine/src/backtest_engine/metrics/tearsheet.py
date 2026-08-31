@@ -16,7 +16,7 @@ Decisions:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +33,6 @@ class ReportConfig:
     outputs_dir: Path
     write_quantstats: bool = True  # set False in tests to avoid network/matplotlib
     write_plotly: bool = True
-    extra_fields: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -188,9 +187,8 @@ def _bias_flags_figure(flags: dict):
     return fig
 
 
-def make_report_config(*, run_id: str, outputs_dir: Path | str, **extra) -> ReportConfig:
+def make_report_config(*, run_id: str, outputs_dir: Path | str) -> ReportConfig:
     return ReportConfig(
         run_id=run_id,
         outputs_dir=Path(outputs_dir),
-        extra_fields=extra,
     )

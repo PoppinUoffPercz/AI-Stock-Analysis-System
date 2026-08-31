@@ -24,21 +24,7 @@ from ta_lib import compute_rsi, compute_smas, compute_macd
 from smart_money import get_smart_money_score
 from reflection import ReflectionLog
 from screener import _discovery_tickers
-
-
-def extract_news_fields(news_raw):
-    """Normalize yfinance 1.5.x news format."""
-    parsed = []
-    for item in news_raw:
-        content = item.get("content", item)
-        title = content.get("title", "")
-        provider_info = content.get("provider", {})
-        publisher = provider_info.get("displayName", "Unknown")
-        canonical = content.get("canonicalUrl", {})
-        link = canonical.get("url", "")
-        pub_date = content.get("pubDate", "")
-        parsed.append({"title": title, "publisher": publisher, "link": link, "pubDate": pub_date})
-    return parsed
+from news_utils import extract_news_fields
 
 
 class BuffettScreener:

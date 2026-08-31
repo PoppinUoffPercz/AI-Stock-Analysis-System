@@ -15,7 +15,6 @@ notify.py                  WhatsApp alert bridge (via zappy-mcp)
 requirements.txt           Python dependencies
 
 # Scion-Bot (Burry — Swing Trading)
-burry_agent_profile.md     Agent persona and swing-trading ruleset
 screener.py                Market scanner — finds "roadkill" near 52W lows
 analyzer.py                Deep-dive DCF + NCAV + technical analysis
 news_engine.py             News catalyst & sentiment monitoring
@@ -23,7 +22,6 @@ portfolio.py               Position tracking with stop-loss + profit targets
 main.py                    CLI orchestrator
 
 # Omaha-Bot (Buffett — Quality Compounder)
-buffett_agent_profile.md   Agent persona and long-term compounder ruleset
 buffett_screener.py        Market scanner — finds wonderful businesses at fair prices
 buffett_analyzer.py        Four Filters + Owner Earnings DCF deep-dive
 buffett_portfolio.py       Long-term position tracker (no stop-losses)
@@ -57,8 +55,8 @@ python buffett_main.py run            # Full review cycle
 
 ## Agent Profiles
 
-- **Scion-Bot (Burry):** `burry_agent_profile.md` — swing-trading with 52W low floors, 8% position caps, 100-200% turnover
-- **Omaha-Bot (Buffett):** `buffett_agent_profile.md` — quality compounding with 25% position caps, no stop-losses, 5-15% turnover
+- **Scion-Bot (Burry):** [`../frameworks/agents/Scion-Bot Agent Profile.md`](../frameworks/agents/Scion-Bot%20Agent%20Profile.md) — swing-trading with 52W low floors, 8% position caps, 100-200% turnover
+- **Omaha-Bot (Buffett):** [`../frameworks/agents/Omaha-Bot Agent Profile.md`](../frameworks/agents/Omaha-Bot%20Agent%20Profile.md) — quality compounding with 25% position caps, no stop-losses, 5-15% turnover
 
 ## Key Differences
 

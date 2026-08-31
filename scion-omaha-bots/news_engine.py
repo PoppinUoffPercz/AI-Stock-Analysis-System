@@ -17,27 +17,7 @@ import asyncio
 import subprocess
 import sys
 
-
-def extract_news_fields(news_raw):
-    """Normalize yfinance 1.5.x news format."""
-    parsed = []
-    for item in news_raw:
-        content = item.get("content", item)
-        title = content.get("title", "")
-        provider_info = content.get("provider", {})
-        publisher = provider_info.get("displayName", "Unknown")
-        canonical = content.get("canonicalUrl", {})
-        link = canonical.get("url", "")
-        pub_date = content.get("pubDate", "")
-        description = content.get("description", "")
-        parsed.append({
-            "title": title,
-            "publisher": publisher,
-            "link": link,
-            "pubDate": pub_date,
-            "description": description
-        })
-    return parsed
+from news_utils import extract_news_fields
 
 
 # Burry's "ick" and reversal keyword dictionaries
@@ -129,7 +109,7 @@ class NewsEngine:
         try:
             t = yf.Ticker(symbol)
             raw_news = t.news or []
-            parsed = extract_news_fields(raw_news)
+            parsed = extract_news_fields(raw_news, description=True)
             return parsed
         except Exception as e:
             print(f"[NewsEngine] Error fetching news for {symbol}: {e}")

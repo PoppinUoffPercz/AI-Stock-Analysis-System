@@ -33,10 +33,11 @@ def test_settings_defaults():
     from backtest_engine.config import Settings
 
     s = Settings()
-    assert s.default_capital == 100_000.0
-    assert s.default_cost == "us_equity_pershare"
-    assert s.default_slippage == "linear_impact"
-    assert s.annualize_factor == 252
+    assert s.data_dir == Path("data")
+    assert s.universe_dir == Path("data/universe")
+    assert s.outputs_dir == Path("outputs")
+    assert s.yf_sleep_sec == 1.5
+    assert s.yf_retries == 3
 
 
 def test_resolve_settings_absoluteizes_paths(tmp_path, monkeypatch):
@@ -45,7 +46,7 @@ def test_resolve_settings_absoluteizes_paths(tmp_path, monkeypatch):
 
     s = resolve_settings()
     assert s.data_dir.is_absolute()
-    assert s.raw_dir == tmp_path / "data" / "raw"
+    assert s.universe_dir == tmp_path / "data" / "universe"
     assert s.outputs_dir == tmp_path / "outputs"
 
 
@@ -77,7 +78,8 @@ def test_cli_settings_prints_json(capsys):
     rc = main(["settings"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "default_capital" in out
+    assert "data_dir" in out
+    assert "yf_retries" in out
 
 
 def test_cli_unknown_command_returns_error(capsys):
@@ -147,23 +149,13 @@ def test_repository_ci_and_optional_dependency_contract():
     assert "|| true" not in workflow_text
     for job in (
         "optional-execution:",
-        "optional-broker:",
-        "optional-statistics:",
         "optional-reporting:",
     ):
         assert job in workflow_text
-    for extra in (".[dev,execution]", ".[dev,broker]", ".[dev,statistics]", ".[dev,reporting]"):
+    assert "optional-broker:" not in workflow_text
+    assert "optional-statistics:" not in workflow_text
+    for extra in (".[dev,execution]", ".[dev,reporting]"):
         assert extra in workflow_text
-
-    statistics_job = workflow_text.split("  optional-statistics:", 1)[1].split(
-        "  optional-reporting:", 1
-    )[0]
-    assert 'python-version: "3.12"' in statistics_job
-    assert "import pandas_ta" in statistics_job
-    assert "pandas_ta.__version__" not in statistics_job
-    assert (
-        "print(scipy.__version__, sklearn.__version__, statsmodels.__version__)" in statistics_job
-    )
 
     with (package_root / "pyproject.toml").open("rb") as f:
         project = tomllib.load(f)["project"]
@@ -172,6 +164,7 @@ def test_repository_ci_and_optional_dependency_contract():
 
     assert "vectorbt>=0.26" in core
     assert "plotly>=5.0.0,<5.14.0" in core
+    assert not any(dep.startswith("tqdm") for dep in core)
     assert not any(dep.startswith("nautilus_trader") for dep in core)
     assert not any(dep.startswith("alpaca-py") for dep in core)
     assert not any(
@@ -179,9 +172,8 @@ def test_repository_ci_and_optional_dependency_contract():
     )
     assert not any(dep.startswith(name) for dep in core for name in ("quantstats", "matplotlib"))
     assert any(dep.startswith("nautilus_trader") for dep in optional["execution"])
-    assert any(dep.startswith("alpaca-py") for dep in optional["broker"])
-    assert any(dep.startswith("scipy") for dep in optional["statistics"])
-    assert 'pandas-ta>=0.4.71b0; python_version >= "3.12"' in optional["statistics"]
+    assert "broker" not in optional
+    assert "statistics" not in optional
     assert any(dep.startswith("quantstats") for dep in optional["reporting"])
     assert not any(dep.startswith("plotly") for dep in optional["reporting"])
     assert any(dep.startswith("pandas-stubs") for dep in optional["dev"])

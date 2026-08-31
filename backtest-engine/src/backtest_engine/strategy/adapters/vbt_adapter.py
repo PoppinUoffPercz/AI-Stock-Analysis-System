@@ -161,11 +161,7 @@ class VBTAdapter:
         vectorized already because the underlying vbt.Portfolio is array-aware.
         """
         results: list[BacktestResult] = []
-        param_names = list(param_grid.keys())
-        # cartesian product of all param values
-        grids = pd.DataFrame(_cartesian(param_grid)).rename(columns=dict(enumerate(param_names)))
-        for _, row in grids.iterrows():
-            params = {k: row[k] for k in param_names}
+        for params in _cartesian(param_grid):
             signals = signal_factory(ohlc, params)
             res = self.run(
                 signals,

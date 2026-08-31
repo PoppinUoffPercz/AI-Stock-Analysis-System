@@ -676,8 +676,8 @@ python buffett_main.py --notify --recipient "CHAT_ID" run
 
 | File | Purpose |
 | :--- | :--- |
-| `burry_agent_profile.md` | Michael Burry persona — swing trading ruleset |
-| `buffett_agent_profile.md` | Warren Buffett persona — quality compounding ruleset |
+| `frameworks/agents/Scion-Bot Agent Profile.md` | Michael Burry persona — swing trading ruleset |
+| `frameworks/agents/Omaha-Bot Agent Profile.md` | Warren Buffett persona — quality compounding ruleset |
 
 ---
 

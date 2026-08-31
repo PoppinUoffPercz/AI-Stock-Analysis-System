@@ -14,7 +14,7 @@
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `burry_agent_profile.md` | Agent persona, trading ruleset, swing-trading variant with news intake | Complete |
+| `Scion-Bot Agent Profile.md` | Canonical agent persona, trading ruleset, swing-trading variant with news intake | Complete |
 | `screener.py` | Market scanner — finds "ick/roadkill" stocks near 52W lows with strong fundamentals | Tested |
 | `analyzer.py` | Deep-dive: DCF, Graham Net-Net, balance sheet audit, technical levels, news catalyst | Tested |
 | `news_engine.py` | Continuous news monitoring — detects extreme panic, reversal catalysts, thesis-breaking news | Tested |

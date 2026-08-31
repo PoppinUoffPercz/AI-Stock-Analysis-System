@@ -33,7 +33,8 @@ def test_cli_settings(capsys):
     rc = cli.main(["settings"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "default_capital" in out
+    assert "data_dir" in out
+    assert "yf_retries" in out
 
 
 def test_cli_lists_strategies(capsys):

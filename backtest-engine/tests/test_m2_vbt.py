@@ -254,8 +254,11 @@ def test_vbt_adapter_sweep_returns_one_result_per_combo():
         universe_ref="SYNTH",
     )
     assert len(results) == 6
-    # Params dict on each result
-    assert all("fast" in r.params and "slow" in r.params for r in results)
-    # No duplicate param combinations (fast=fast in (10,10) etc not allowed since fast<slow)
-    combos = {(r.params["fast"], r.params["slow"]) for r in results}
-    assert len(combos) == 6
+    assert [(r.params["fast"], r.params["slow"]) for r in results] == [
+        (5, 30),
+        (5, 50),
+        (10, 30),
+        (10, 50),
+        (20, 30),
+        (20, 50),
+    ]

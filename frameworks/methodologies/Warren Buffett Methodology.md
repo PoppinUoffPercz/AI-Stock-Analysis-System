@@ -82,7 +82,7 @@ Represents the cash that can be withdrawn annually without impairing competitive
 
 ## Source Files
 
-- `./scion-omaha-bots\buffett_agent_profile.md`
+- `../agents/Omaha-Bot Agent Profile.md`
 - `./scion-omaha-bots\buffett_screener.py`
 - `./scion-omaha-bots\buffett_analyzer.py`
 - `./scion-omaha-bots\buffett_portfolio.py`

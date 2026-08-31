@@ -7,26 +7,7 @@ import datetime
 
 from ta_lib import compute_all as compute_ta
 from smart_money import get_smart_money_score
-
-
-def extract_news_fields(news_raw):
-    """Normalize yfinance 1.5.x news format (content nested dict) and legacy format."""
-    parsed = []
-    for item in news_raw:
-        content = item.get("content", item)
-        title = content.get("title", "")
-        provider_info = content.get("provider", {})
-        publisher = provider_info.get("displayName", content.get("publisher", "Unknown"))
-        canonical = content.get("canonicalUrl", {})
-        link = canonical.get("url", content.get("link", ""))
-        pub_date = content.get("pubDate", "")
-        parsed.append({
-            "title": title,
-            "publisher": publisher,
-            "link": link,
-            "pubDate": pub_date
-        })
-    return parsed
+from news_utils import extract_news_fields
 
 
 class ScionAnalyzer:
@@ -269,7 +250,7 @@ class ScionAnalyzer:
         if not news_raw:
             return []
 
-        news_items = extract_news_fields(news_raw)
+        news_items = extract_news_fields(news_raw, legacy=True)
         analyzed_news = []
         for item in news_items[:5]:  # Top 5 news articles
             title = item.get("title", "")

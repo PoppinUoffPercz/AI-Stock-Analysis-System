@@ -403,6 +403,64 @@ def test_walk_forward_rejects_overlapping_oos_windows():
         )
 
 
+@pytest.mark.parametrize(
+    ("is_window", "message"),
+    [
+        ((2, 2), "IS windows must be non-empty"),
+        ((0, 4), "contaminates paired OOS window"),
+    ],
+)
+def test_walk_forward_rejects_invalid_or_contaminated_is_window(is_window, message):
+    index = pd.date_range("2024-01-01", periods=6, tz="UTC")
+    ohlc = pd.DataFrame({"close": np.arange(6, dtype=float)}, index=index)
+
+    with pytest.raises(ValueError, match=message):
+        walk_forward(
+            StrategySpec(
+                name="contaminated",
+                signal_factory=lambda bars, params: pd.DataFrame(index=bars.index),
+            ),
+            ohlc,
+            run_engine=lambda *_args, **_kwargs: None,
+            optimize=lambda _spec, _bars: {},
+            is_windows=[(index[is_window[0]], index[is_window[1]])],
+            oos_windows=[(index[3], index[5])],
+        )
+
+
+def test_walk_forward_calls_run_spec_directly_with_warmup_history():
+    from backtest_engine.pipeline.discovery import run_spec
+
+    index = pd.date_range("2024-01-01", periods=8, tz="UTC")
+    close = pd.Series(np.arange(8, dtype=float) + 100.0, index=index)
+    ohlc = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+            "volume": 1_000_000.0,
+        },
+        index=index,
+    )
+
+    def signals(history, params):
+        warmed = history["close"].rolling(params["period"]).mean().notna()
+        return pd.DataFrame({"entry": warmed, "exit": False}, index=history.index)
+
+    result = walk_forward(
+        StrategySpec(name="warmup", signal_factory=signals, params={"period": 3}),
+        ohlc,
+        run_engine=run_spec,
+        optimize=lambda _spec, _bars: {"period": 3},
+        is_windows=[(index[0], index[3])],
+        oos_windows=[(index[3], index[7])],
+    )
+
+    assert result.oos_equity.index.equals(index[3:7])
+    assert not result.oos_equity.empty
+
+
 def test_walk_forward_rejects_duplicate_stitched_dates():
     index = pd.date_range("2024-01-01", periods=6, tz="UTC")
     ohlc = pd.DataFrame({"close": np.arange(6, dtype=float)}, index=index)

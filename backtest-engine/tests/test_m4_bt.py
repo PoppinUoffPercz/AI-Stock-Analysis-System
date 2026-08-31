@@ -104,7 +104,7 @@ def test_bt_adapter_zero_cost_keeps_equity_near_buy_and_hold_when_always_long():
 
 
 @pytest.mark.smoke
-def test_backtrader_normalizes_non_midnight_utc_signal_timestamps():
+def test_backtrader_preserves_non_midnight_utc_signal_timestamps():
     pytest.importorskip("backtrader")
     ohlc = _synth_ohlc(n=400, seed=3)
     ohlc.index = ohlc.index + pd.Timedelta(hours=5)
@@ -116,6 +116,40 @@ def test_backtrader_normalizes_non_midnight_utc_signal_timestamps():
     )
     result = run_spec(spec, ohlc, engine="backtrader")
     assert result.n_trades > 0
+
+
+@pytest.mark.smoke
+def test_backtrader_executes_unique_same_day_intraday_signal():
+    index = pd.DatetimeIndex(
+        ["2024-01-02T10:00:00Z", "2024-01-02T11:00:00Z", "2024-01-02T12:00:00Z"]
+    )
+    ohlc = pd.DataFrame(
+        {
+            "open": [100.0, 101.0, 102.0],
+            "high": [101.0, 102.0, 103.0],
+            "low": [99.0, 100.0, 101.0],
+            "close": [100.0, 101.0, 102.0],
+            "volume": [1_000.0] * 3,
+        },
+        index=index,
+    )
+    signals = pd.DataFrame(
+        {"entry": [True, False, False], "exit": [False, False, False]}, index=index
+    )
+
+    result = BTAdapter().run(
+        signals,
+        ohlc,
+        capital=1_000.0,
+        cost_model="zero",
+        strategy_name="intraday",
+        universe_ref="INTRADAY",
+        params={},
+        run_id="intraday",
+    )
+
+    assert result.trades[0].timestamp == index[1]
+    assert result.equity.index.equals(index)
 
 
 @pytest.mark.smoke
@@ -261,3 +295,34 @@ def test_bt_adapter_charges_execution_costs_to_broker_equity():
     assert zero.final_equity == pytest.approx(1_000.0)
     assert recorded_costs > 0.0
     assert zero.final_equity - costly.final_equity == pytest.approx(recorded_costs)
+
+
+def test_bt_adapter_sizes_entry_to_include_high_volume_impact_costs():
+    idx = pd.date_range("2024-01-02", periods=3, freq="D", tz="UTC")
+    ohlc = pd.DataFrame(
+        {
+            "open": [100.0] * 3,
+            "high": [101.0] * 3,
+            "low": [99.0] * 3,
+            "close": [100.0] * 3,
+            "volume": [0.01] * 3,
+        },
+        index=idx,
+    )
+    signals = pd.DataFrame(
+        {"entry": [True, False, False], "exit": [False, False, False]}, index=idx
+    )
+
+    result = BTAdapter().run(
+        signals,
+        ohlc,
+        capital=1_000.0,
+        cost_model="us_equity_flat",
+        strategy_name="impact",
+        universe_ref="IMPACT",
+        params={},
+        run_id="impact",
+    )
+
+    assert result.final_equity >= 0.0
+    assert result.trades[0].quantity == 4.0

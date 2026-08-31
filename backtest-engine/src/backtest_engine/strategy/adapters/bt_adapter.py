@@ -62,9 +62,9 @@ class _SignalDrivenStrategy(bt.Strategy):
 
         # Backtrader feeds us naive datetime objects; the entry/exit series
         # passed in via params were stripped of tz upstream (UTC naive). The
-        # lookup day-normalizes both sides.
+        # lookup preserves exact timestamps on both sides.
         bt_dt = self.datas[0].datetime.datetime(0)  # already datetime (naive)
-        ts_naive = pd.Timestamp(bt_dt).normalize()
+        ts_naive = pd.Timestamp(bt_dt)
         try:
             entry = bool(self._entry.loc[ts_naive])
         except KeyError:
@@ -90,7 +90,21 @@ class _SignalDrivenStrategy(bt.Strategy):
         self._pending_action = None
         if side == "LONG":
             price = float(self.datas[0].open[0])
-            size = int(self.broker.getcash() * 0.99 / max(price, 1e-6))
+            cash = float(self.broker.getcash())
+            budget = cash * 0.99
+            volume = float(self.datas[0].volume[0])
+            high = int(budget / max(price, 1e-6))
+            low = 0
+            while low < high:
+                size = (low + high + 1) // 2
+                cost = self._cm.commission(size, price) + self._cm.slippage_cost(
+                    size, price, volume
+                )
+                if size * price + cost <= budget:
+                    low = size
+                else:
+                    high = size - 1
+            size = low
             if size <= 0:
                 self._rejections.append({"side": side, "reason": "insufficient_cash"})
                 return
@@ -224,7 +238,6 @@ class BTAdapter:
         sig_index = pd.DatetimeIndex(sig_naive.index)
         if sig_index.tz is not None:
             sig_naive.index = sig_index.tz_convert("UTC").tz_localize(None)
-        sig_naive.index = pd.DatetimeIndex(sig_naive.index).normalize()
 
         ohlc_naive = ohlc.copy()
         ohlc_index = pd.DatetimeIndex(ohlc_naive.index)

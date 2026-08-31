@@ -51,7 +51,13 @@ def walk_forward(
     """
     if len(is_windows) != len(oos_windows):
         raise ValueError("IS and OOS windows must align 1:1")
+    _validate_is_windows(is_windows)
     _validate_oos_windows(oos_windows)
+    for (_, is_end), (oos_start, _) in zip(is_windows, oos_windows, strict=True):
+        if is_end > oos_start:
+            raise ValueError(
+                "IS window contaminates paired OOS window; IS end must be <= OOS start"
+            )
     folds = sorted(zip(is_windows, oos_windows, strict=True), key=lambda fold: fold[1])
     is_cagrs: list[float] = []
     oos_cagrs: list[float] = []
@@ -162,3 +168,8 @@ def _validate_oos_windows(
         start < prior_end for (_, prior_end), (start, _) in zip(ordered, ordered[1:], strict=False)
     ):
         raise ValueError("OOS windows must not overlap")
+
+
+def _validate_is_windows(windows: list[tuple[pd.Timestamp, pd.Timestamp]]) -> None:
+    if any(start >= end for start, end in windows):
+        raise ValueError("IS windows must be non-empty half-open intervals")

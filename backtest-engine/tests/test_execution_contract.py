@@ -109,14 +109,14 @@ def test_costly_open_position_is_preserved_without_inventing_an_exit(adapter_typ
     _assert_cost_accounting(result, cost_addback_final_equity=1_000.0)
 
 
-def test_cost_addback_does_not_claim_cost_free_sizing_parity():
+def test_cost_aware_sizing_preserves_cross_engine_parity():
     ohlc, signals = _round_trip_fixture(entry_open=90.0)
 
     vbt = _run(VBTAdapter(), ohlc, signals, "us_equity_proportional")
     bt = _run(BTAdapter(), ohlc, signals, "us_equity_proportional")
 
     assert vbt.trades[0].quantity == 10.0
-    assert bt.trades[0].quantity == 11.0
+    assert bt.trades[0].quantity == 10.0
     assert vbt.metadata["cost_addback_final_equity"] == pytest.approx(
         vbt.final_equity + vbt.metadata["total_execution_cost"]
     )

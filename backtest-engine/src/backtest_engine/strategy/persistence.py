@@ -180,6 +180,13 @@ def _validate_manifest_result(manifest: RunManifest, result: BacktestResult) -> 
     cost = manifest.stable.get("cost", {})
     if strategy.get("name") != result.strategy_name or cost.get("name") != result.cost_model:
         raise ValueError("manifest stable fields do not match persisted result")
+    universe = manifest.stable.get("universe", {})
+    expected_universe = Path(result.universe_ref)
+    portable_reference = (
+        expected_universe.name if expected_universe.is_absolute() else expected_universe.as_posix()
+    )
+    if universe.get("reference") != portable_reference:
+        raise ValueError("manifest stable fields do not match persisted result universe_ref")
 
 
 def _series_to_payload(series: pd.Series) -> dict[str, Any]:

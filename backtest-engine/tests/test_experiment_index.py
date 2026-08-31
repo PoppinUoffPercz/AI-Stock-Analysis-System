@@ -48,3 +48,16 @@ def test_index_reports_corrupt_line_number(tmp_path):
 
     with pytest.raises(ValueError, match=r"experiments.jsonl:2"):
         ExperimentIndex(path).get("ok")
+
+
+@pytest.mark.parametrize("second_identity", ["one", "different"])
+def test_index_rejects_duplicate_run_id_on_disk(tmp_path, second_identity):
+    path = tmp_path / "experiments.jsonl"
+    records = [
+        {"run_id": "r1", "identity_hash": "one"},
+        {"run_id": "r1", "identity_hash": second_identity},
+    ]
+    path.write_text("".join(json.dumps(item) + "\n" for item in records), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"experiments.jsonl:2.*duplicate run_id r1.*line 1"):
+        ExperimentIndex(path).get("r1")

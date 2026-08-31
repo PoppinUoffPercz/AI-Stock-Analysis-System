@@ -69,7 +69,7 @@ def test_render_report_bias_flags_present(tmp_path: Path):
     # Force a high sharpe by sending a stable positive return (low vol).
     n = 100
     idx = pd.bdate_range("2020-01-01", periods=n).tz_localize("UTC")
-    rr = pd.Series([0.001] * n, index=idx)
+    rr = pd.Series([0.0] + [0.001] * (n - 1), index=idx)
     eq = (1 + rr).cumprod() * 100
     result = BacktestResult(
         run_id="m7-sharpe",

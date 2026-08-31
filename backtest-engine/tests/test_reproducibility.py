@@ -93,6 +93,46 @@ def test_manifest_identity_excludes_run_id_and_timestamp_but_covers_inputs(monke
         first.manifest.identity_hash = "changed"
 
 
+def test_signal_warmup_does_not_change_execution_data_hash(monkeypatch):
+    from backtest_engine import pipeline
+
+    class Adapter:
+        def run(self, _signals, ohlc, **kwargs):
+            from backtest_engine.strategy.result import BacktestResult
+
+            equity = pd.Series([100.0] * len(ohlc), index=ohlc.index)
+            return BacktestResult(
+                run_id=kwargs["run_id"],
+                strategy_name=kwargs["strategy_name"],
+                engine="fake",
+                params=kwargs["params"],
+                capital=kwargs["capital"],
+                cost_model=kwargs["cost_model"],
+                universe_ref=kwargs["universe_ref"],
+                equity=equity,
+                returns=equity.pct_change().fillna(0.0),
+            )
+
+    monkeypatch.setattr(pipeline.discovery, "get_adapter", lambda _name: Adapter())
+    spec = StrategySpec(
+        "warmup", lambda data, _params: pd.DataFrame({"entry": False}, index=data.index)
+    )
+    execution = _ohlc().iloc[1:]
+    result = run_spec(spec, execution, engine="fake", run_id="warmup", signal_ohlc=_ohlc())
+
+    assert result.manifest is not None
+    assert result.manifest.stable["data"]["content_sha256"] == dataframe_sha256(execution)
+
+
+def test_run_spec_rejects_signal_history_missing_execution_timestamp():
+    spec = StrategySpec(
+        "warmup", lambda data, _params: pd.DataFrame({"entry": False}, index=data.index)
+    )
+
+    with pytest.raises(ValueError, match="signal_ohlc does not cover.*first missing"):
+        run_spec(spec, _ohlc(), signal_ohlc=_ohlc().iloc[:-1])
+
+
 def test_manifest_json_is_stable_and_reload_is_immutable(tmp_path):
     manifest = RunManifest.from_parts(
         stable={"params": {"slow": 20, "fast": 5}},

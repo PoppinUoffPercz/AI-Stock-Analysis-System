@@ -78,6 +78,7 @@ class ExperimentIndex:
         if not self.path.exists():
             return []
         records = []
+        run_id_lines: dict[str, int] = {}
         for line_number, line in enumerate(self.path.read_text(encoding="utf-8").splitlines(), 1):
             try:
                 item = json.loads(line)
@@ -89,5 +90,12 @@ class ExperimentIndex:
                 raise ValueError(
                     f"malformed experiment index at {self.path}:{line_number}: expected object with run_id"
                 )
+            run_id = item["run_id"]
+            if run_id in run_id_lines:
+                raise ValueError(
+                    f"malformed experiment index at {self.path}:{line_number}: duplicate run_id "
+                    f"{run_id} (first seen on line {run_id_lines[run_id]}); remove the duplicate line"
+                )
+            run_id_lines[run_id] = line_number
             records.append(item)
         return records

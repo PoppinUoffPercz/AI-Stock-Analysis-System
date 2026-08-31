@@ -24,7 +24,6 @@ adapt for your own hypothesis file.
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 from itertools import product
 from typing import Any
 
@@ -151,22 +150,13 @@ def run_walk_forward(
         return optimise_grid(spec_, is_ohlc_, param_grid=grid, objective=objective)
 
     def _run(spec_, ohlc_, **kw):
-        signal_ohlc = kw.get("signal_ohlc")
-        run_spec_ = spec_
-        if signal_ohlc is not None:
-            signals = spec_.make_signals(signal_ohlc, kw.get("params", spec_.params)).loc[
-                ohlc_.index
-            ]
-            run_spec_ = replace(
-                spec_,
-                signal_factory=lambda _bars, _params: signals,
-            )
         return run_spec(
-            run_spec_,
+            spec_,
             ohlc_,
             engine="vectorbt",
             params=kw.get("params", spec_.params),
             run_id=kw.get("run_id", "wf"),
+            signal_ohlc=kw.get("signal_ohlc"),
         )
 
     result = walk_forward(

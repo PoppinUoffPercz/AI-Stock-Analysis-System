@@ -49,6 +49,7 @@ def run_spec(
     random_seed: int | None = None,
     relevant_args: dict[str, Any] | None = None,
     dataset_identity: dict[str, Any] | None = None,
+    signal_ohlc: pd.DataFrame | None = None,
 ) -> BacktestResult:
     """Execute `spec` through `engine`, optionally enforcing point-in-time membership."""
     if universe is not None:
@@ -62,7 +63,17 @@ def run_spec(
     use_cost = cost_model or spec.cost_model
     use_cap = capital if capital is not None else spec.capital
     use_params = params if params is not None else spec.params
-    signals = spec.make_signals(ohlc, use_params)
+    signal_bars = signal_ohlc if signal_ohlc is not None else ohlc
+    if signal_ohlc is not None:
+        missing = ohlc.index.difference(signal_ohlc.index)
+        if not missing.empty:
+            raise ValueError(
+                f"signal_ohlc does not cover {len(missing)} execution timestamp(s); first missing: "
+                f"{missing[0]}"
+            )
+    signals = spec.make_signals(signal_bars, use_params)
+    if signal_ohlc is not None:
+        signals = signals.loc[ohlc.index]
     result = adapter.run(
         signals,
         ohlc,

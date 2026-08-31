@@ -82,6 +82,10 @@ def validate_backtest_result(result: BacktestResult) -> BacktestResult:
     returns_index = _validate_series(result.returns, "returns")
     if len(result.equity) != len(result.returns) or not equity_index.equals(returns_index):
         raise ValueError("equity and returns must have the same length and exactly align")
+    expected_returns = result.equity.pct_change().fillna(0.0).to_numpy(dtype="float64")
+    actual_returns = result.returns.to_numpy(dtype="float64")
+    if not np.allclose(actual_returns, expected_returns, rtol=1e-9, atol=1e-9):
+        raise ValueError("returns must reconcile with equity pct_change using a zero first return")
 
     if not isinstance(result.trades, list):
         raise ValueError("trades must be a list")

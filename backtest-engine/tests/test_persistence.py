@@ -131,6 +131,40 @@ def test_irregular_result_round_trip(tmp_path):
     pd.testing.assert_index_equal(loaded.returns.index, irregular)
 
 
+def test_validator_accepts_reconciled_returns_on_irregular_index():
+    result = _result()
+    irregular = pd.DatetimeIndex(
+        ["2024-01-01T14:30:00Z", "2024-01-03T15:15:00Z", "2024-01-09T20:00:00Z"]
+    )
+    result.equity.index = irregular
+    result.returns = result.equity.pct_change().fillna(0.0)
+    result.trades[0].timestamp = irregular[0]
+    result.trades[0].exit_timestamp = irregular[-1]
+
+    assert validate_backtest_result(result) is result
+
+
+@pytest.mark.parametrize("field_name", ["equity", "returns"])
+def test_load_result_rejects_persisted_equity_return_mismatch(tmp_path, field_name):
+    path = persist_result(_result(), tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload[field_name]["values"][1]["value"] += 1.0
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="returns.*equity"):
+        load_result(path)
+
+
+def test_load_result_rejects_manifest_universe_reference_tamper(tmp_path):
+    path = persist_result(_result(), tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["universe_ref"] = "data/universe/other.csv"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest stable fields"):
+        load_result(path)
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [

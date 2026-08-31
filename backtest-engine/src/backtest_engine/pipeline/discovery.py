@@ -52,6 +52,7 @@ def run_spec(
     signal_ohlc: pd.DataFrame | None = None,
 ) -> BacktestResult:
     """Execute `spec` through `engine`, optionally enforcing point-in-time membership."""
+    active_universe = None
     if universe is not None:
         active_universe = (
             universe if isinstance(universe, Universe) else Universe.from_csv(universe)
@@ -64,8 +65,10 @@ def run_spec(
     use_cap = capital if capital is not None else spec.capital
     use_params = params if params is not None else spec.params
     signal_bars = signal_ohlc if signal_ohlc is not None else ohlc
+    if active_universe is not None and signal_ohlc is not None:
+        signal_bars = active_universe.filter_panel(signal_bars)
     if signal_ohlc is not None:
-        missing = ohlc.index.difference(signal_ohlc.index)
+        missing = ohlc.index.difference(signal_bars.index)
         if not missing.empty:
             raise ValueError(
                 f"signal_ohlc does not cover {len(missing)} execution timestamp(s); first missing: "
@@ -86,6 +89,20 @@ def run_spec(
     )
     if not isinstance(result, BacktestResult):
         return result
+    if use_cost == "zero" or engine == "nautilus":
+        gross_result = result
+    else:
+        gross_result = adapter.run(
+            signals,
+            ohlc,
+            capital=use_cap,
+            cost_model="zero",
+            strategy_name=spec.name,
+            universe_ref=spec.universe_ref,
+            params=use_params,
+            run_id=None,
+        )
+    result.metadata["strategy_gross_return"] = gross_result.final_equity / use_cap - 1.0
     attach_buy_and_hold_benchmark(result, ohlc)
     result.manifest = build_manifest(
         run_id=result.run_id,
@@ -97,6 +114,7 @@ def run_spec(
         cost_model=use_cost,
         universe_ref=spec.universe_ref,
         ohlc=ohlc,
+        signal_ohlc=signal_bars if signal_ohlc is not None else None,
         universe=universe if isinstance(universe, (str, Path)) else None,
         random_seed=random_seed,
         relevant_args=relevant_args,

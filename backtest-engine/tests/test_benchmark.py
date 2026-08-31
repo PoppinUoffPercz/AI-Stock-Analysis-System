@@ -10,6 +10,7 @@ from backtest_engine.metrics.tearsheet import ReportConfig, render_report
 from backtest_engine.pipeline import discovery
 from backtest_engine.strategy.persistence import load_result
 from backtest_engine.strategy.result import BacktestResult, TradeRecord
+from backtest_engine.strategy.spec import StrategySpec
 
 
 def _result(symbols: list[str] | None = None) -> BacktestResult:
@@ -105,6 +106,41 @@ def test_run_spec_attaches_benchmark_to_library_results(monkeypatch):
     result = discovery.run_spec(spec, ohlc)
 
     assert result.metadata["benchmark"]["total_return"] == pytest.approx(0.2)
+
+
+def test_run_spec_gross_return_matches_zero_cost_replay_not_cost_addback():
+    index = pd.date_range("2024-01-01", periods=7, tz="UTC")
+    prices = [10.0, 10.0, 20.0, 20.0, 10.0, 10.0, 20.0]
+    ohlc = pd.DataFrame(
+        {
+            "open": prices,
+            "high": prices,
+            "low": prices,
+            "close": prices,
+            "volume": [1_000_000.0] * len(index),
+        },
+        index=index,
+    )
+    ohlc.attrs["symbol"] = "TEST"
+
+    def make_signals(frame, _params):
+        return pd.DataFrame(
+            {
+                "entry": [True, False, False, True, False, False, False],
+                "exit": [False, True, False, False, True, False, False],
+            },
+            index=frame.index,
+        )
+
+    spec = StrategySpec("compound", make_signals, capital=1_000.0)
+    costly = discovery.run_spec(spec, ohlc, cost_model="us_equity_proportional")
+    zero = discovery.run_spec(spec, ohlc, cost_model="zero")
+
+    expected_gross = zero.final_equity / zero.capital - 1.0
+    addback = (costly.final_equity + costly.metadata["total_execution_cost"]) / costly.capital - 1.0
+    assert costly.metadata["strategy_gross_return"] == pytest.approx(expected_gross)
+    assert costly.metadata["benchmark"]["strategy_gross_return"] == pytest.approx(expected_gross)
+    assert costly.metadata["strategy_gross_return"] != pytest.approx(addback)
 
 
 def test_report_persists_benchmark_before_metrics_and_index(tmp_path):

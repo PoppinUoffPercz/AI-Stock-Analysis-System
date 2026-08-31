@@ -11,6 +11,8 @@ import pytest
 
 from backtest_engine import cli
 from backtest_engine.data.store import write_clean
+from backtest_engine.pipeline import discovery
+from backtest_engine.strategy.result import BacktestResult
 
 
 def _write_cli_fixture(root: Path, symbol: str = "TEST") -> None:
@@ -87,6 +89,59 @@ def test_cli_passes_explicit_universe_csv_to_shared_run_spec(tmp_path: Path, mon
         )
 
     assert captured["universe"] == universe_csv
+
+
+@pytest.mark.parametrize("command", ["discover", "replay"])
+def test_cli_date_range_uses_universe_filtered_result_period(command, tmp_path: Path, monkeypatch):
+    universe_csv = tmp_path / "universe.csv"
+    universe_csv.write_text(
+        "symbol,list_date,delist_date\nSPY,2018-01-04,2018-01-08\n", encoding="utf-8"
+    )
+    captured = {}
+
+    class Adapter:
+        def run(self, _signals, ohlc, **kwargs):
+            equity = pd.Series(100.0, index=ohlc.index)
+            return BacktestResult(
+                run_id=kwargs["run_id"],
+                strategy_name=kwargs["strategy_name"],
+                engine="fake",
+                params=kwargs["params"],
+                capital=kwargs["capital"],
+                cost_model=kwargs["cost_model"],
+                universe_ref=kwargs["universe_ref"],
+                equity=equity,
+                returns=equity.pct_change().fillna(0.0),
+            )
+
+    def capture_report(result, _config):
+        captured["result"] = result
+        return SimpleNamespace(out_dir=tmp_path, html_path=tmp_path / "report.html")
+
+    monkeypatch.setattr(discovery, "get_adapter", lambda _name: Adapter())
+    monkeypatch.setattr(cli, "render_report", capture_report)
+
+    assert (
+        cli.main(
+            [
+                command,
+                "--strategy",
+                "sma_cross",
+                "--synthetic",
+                "--days",
+                "10",
+                "--universe-csv",
+                str(universe_csv),
+            ]
+        )
+        == 0
+    )
+
+    result = captured["result"]
+    assert result.metadata["date_range"] == {
+        "start": "2018-01-04T00:00:00+00:00",
+        "end": "2018-01-05T00:00:00+00:00",
+    }
 
 
 @pytest.mark.smoke

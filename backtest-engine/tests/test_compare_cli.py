@@ -34,6 +34,7 @@ def _persist(outputs, run_id: str, final: float, benchmark: float) -> None:
             "symbols": ["TEST"],
             "date_range": {"start": index[0].isoformat(), "end": index[-1].isoformat()},
             "total_execution_cost": 0.0,
+            "strategy_gross_return": final / 100.0 - 1 + 0.05,
             "benchmark": {"status": "available", "total_return": benchmark},
         },
     )
@@ -76,6 +77,7 @@ def test_cli_compare_outputs_deterministic_json_for_explicit_runs(tmp_path, caps
         "trade_count",
     ]
     assert rows[0]["total_return"] == pytest.approx(0.2)
+    assert rows[0]["gross_return"] == pytest.approx(0.25)
     assert rows[0]["benchmark"] == pytest.approx(0.15)
 
 

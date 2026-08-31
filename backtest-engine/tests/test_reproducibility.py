@@ -122,6 +122,47 @@ def test_signal_warmup_does_not_change_execution_data_hash(monkeypatch):
 
     assert result.manifest is not None
     assert result.manifest.stable["data"]["content_sha256"] == dataframe_sha256(execution)
+    assert result.manifest.stable["signal_data"]["content_sha256"] == dataframe_sha256(_ohlc())
+
+
+def test_signal_warmup_content_changes_manifest_identity(monkeypatch):
+    from backtest_engine import pipeline
+
+    class Adapter:
+        def run(self, _signals, ohlc, **kwargs):
+            from backtest_engine.strategy.result import BacktestResult
+
+            equity = pd.Series([100.0] * len(ohlc), index=ohlc.index)
+            return BacktestResult(
+                run_id=kwargs["run_id"],
+                strategy_name=kwargs["strategy_name"],
+                engine="fake",
+                params=kwargs["params"],
+                capital=kwargs["capital"],
+                cost_model=kwargs["cost_model"],
+                universe_ref=kwargs["universe_ref"],
+                equity=equity,
+                returns=equity.pct_change().fillna(0.0),
+            )
+
+    monkeypatch.setattr(pipeline.discovery, "get_adapter", lambda _name: Adapter())
+    spec = StrategySpec(
+        "warmup", lambda data, _params: pd.DataFrame({"entry": False}, index=data.index)
+    )
+    first_warmup = _ohlc()
+    changed_warmup = _ohlc()
+    changed_warmup.iloc[0, changed_warmup.columns.get_loc("close")] = 99.0
+    execution = first_warmup.iloc[1:]
+
+    first = run_spec(spec, execution, engine="fake", run_id="first", signal_ohlc=first_warmup)
+    same = run_spec(spec, execution, engine="fake", run_id="same", signal_ohlc=first_warmup.copy())
+    changed = run_spec(spec, execution, engine="fake", run_id="changed", signal_ohlc=changed_warmup)
+
+    assert first.manifest is not None
+    assert same.manifest is not None
+    assert changed.manifest is not None
+    assert first.manifest.identity_hash == same.manifest.identity_hash
+    assert first.manifest.identity_hash != changed.manifest.identity_hash
 
 
 def test_run_spec_rejects_signal_history_missing_execution_timestamp():

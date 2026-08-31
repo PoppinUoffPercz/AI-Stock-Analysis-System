@@ -32,6 +32,7 @@ def attach_buy_and_hold_benchmark(result: BacktestResult, ohlc: pd.DataFrame) ->
         )
         net_return = result.final_equity / result.capital - 1.0
         cost_addback_return = (result.final_equity + total_costs) / result.capital - 1.0
+        gross_return = float(result.metadata.get("strategy_gross_return", net_return))
         benchmark_return = float(
             execution_bars["close"].iloc[-1] / execution_bars["open"].iloc[0] - 1.0
         )
@@ -44,6 +45,7 @@ def attach_buy_and_hold_benchmark(result: BacktestResult, ohlc: pd.DataFrame) ->
             "end": pd.Timestamp(execution_bars.index[-1]).isoformat(),
             "total_return": benchmark_return,
             "strategy_cost_addback_return": cost_addback_return,
+            "strategy_gross_return": gross_return,
             "strategy_net_return": net_return,
             "relative_net_performance": net_return - benchmark_return,
         }

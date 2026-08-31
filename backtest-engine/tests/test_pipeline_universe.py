@@ -54,6 +54,23 @@ def test_run_spec_filters_before_signal_factory_and_adapter(monkeypatch):
     assert adapter.ohlc.index.equals(expected)
 
 
+def test_run_spec_filters_signal_warmup_with_same_point_in_time_universe(monkeypatch):
+    seen: list[pd.DataFrame] = []
+    adapter = _Adapter()
+    monkeypatch.setattr(discovery, "get_adapter", lambda _engine: adapter)
+    universe = Universe(
+        pd.DataFrame([{"symbol": "AAA", "list_date": "2020-01-02", "delist_date": None}])
+    )
+    signal_ohlc = _ohlc()
+    execution = signal_ohlc.loc["2020-01-03":]
+
+    discovery.run_spec(_spec(seen), execution, universe=universe, signal_ohlc=signal_ohlc)
+
+    assert seen[0].index.equals(pd.date_range("2020-01-02", periods=4, tz="UTC"))
+    assert adapter.ohlc is not None
+    assert adapter.ohlc.index.equals(execution.index)
+
+
 def test_run_spec_without_universe_leaves_frame_unchanged(monkeypatch):
     seen: list[pd.DataFrame] = []
     adapter = _Adapter()

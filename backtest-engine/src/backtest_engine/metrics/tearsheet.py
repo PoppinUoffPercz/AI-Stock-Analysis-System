@@ -67,6 +67,7 @@ def render_report(
             {
                 "benchmark_total_return": float(benchmark["total_return"]),
                 "strategy_cost_addback_return": float(benchmark["strategy_cost_addback_return"]),
+                "strategy_gross_return": float(benchmark["strategy_gross_return"]),
                 "strategy_net_return": float(benchmark["strategy_net_return"]),
                 "relative_net_performance": float(benchmark["relative_net_performance"]),
             }

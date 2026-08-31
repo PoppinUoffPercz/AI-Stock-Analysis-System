@@ -123,6 +123,7 @@ def build_manifest(
     cost_model: str,
     universe_ref: str,
     ohlc: pd.DataFrame | None = None,
+    signal_ohlc: pd.DataFrame | None = None,
     universe: str | Path | None = None,
     random_seed: int | None = None,
     relevant_args: Mapping[str, Any] | None = None,
@@ -147,6 +148,15 @@ def build_manifest(
         "capital": capital,
         "cost": {"name": cost_model, "config": vars(cost)},
         "data": data,
+        "signal_data": (
+            {
+                "content_sha256": dataframe_sha256(signal_ohlc),
+                "rows": len(signal_ohlc),
+                "identity": _dataset_identity(signal_ohlc),
+            }
+            if signal_ohlc is not None
+            else None
+        ),
         "universe": universe_identity,
         "random_seed": random_seed,
         "args": dict(relevant_args or {}),

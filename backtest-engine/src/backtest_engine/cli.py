@@ -272,8 +272,8 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         {
             "symbols": [symbol],
             "date_range": {
-                "start": pd.Timestamp(ohlc.index[0]).isoformat(),
-                "end": pd.Timestamp(ohlc.index[-1]).isoformat(),
+                "start": pd.Timestamp(res.equity.index[0]).isoformat(),
+                "end": pd.Timestamp(res.equity.index[-1]).isoformat(),
             },
             "data_source": source_label,
             "data_root": str(data_root),
@@ -409,8 +409,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         {
             "symbols": [symbol],
             "date_range": {
-                "start": pd.Timestamp(ohlc.index[0]).isoformat(),
-                "end": pd.Timestamp(ohlc.index[-1]).isoformat(),
+                "start": pd.Timestamp(result.equity.index[0]).isoformat(),
+                "end": pd.Timestamp(result.equity.index[-1]).isoformat(),
             },
             "data_source": source_label,
             "data_root": str(data_root),
@@ -488,7 +488,12 @@ def _cmd_compare(args: argparse.Namespace) -> int:
             "end": result.equity.index[-1].isoformat(),
         }
         net_return = float(metrics.get("strategy_net_return", metrics["total_return"]))
-        gross_return = float(metrics.get("strategy_cost_addback_return", net_return))
+        gross_return = float(
+            metrics.get(
+                "strategy_gross_return",
+                result.metadata.get("strategy_gross_return", net_return),
+            )
+        )
         rows.append(
             {
                 "run_id": result.run_id,

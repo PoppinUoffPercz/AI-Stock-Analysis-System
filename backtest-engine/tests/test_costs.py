@@ -21,7 +21,12 @@ from backtest_engine.execution.costs import (
 
 
 def test_preset_keys_match_plan():
-    assert set(PRESETS.keys()) == {"us_equity_pershare", "us_equity_flat", "zero"}
+    assert set(PRESETS.keys()) == {
+        "us_equity_pershare",
+        "us_equity_flat",
+        "us_equity_proportional",
+        "zero",
+    }
 
 
 def test_zero_preset():

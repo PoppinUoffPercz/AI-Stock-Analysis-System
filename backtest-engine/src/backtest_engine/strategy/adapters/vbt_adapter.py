@@ -71,11 +71,11 @@ class VBTAdapter:
 
         # `freq` controls time-based metrics; it does not shift fills. The
         # explicit signal shift above is therefore part of the fill policy.
-        from backtest_engine.execution.costs import (  # noqa: PLC0415 - lazy
-            build_cost_funcs,
-        )
+        from backtest_engine.execution.costs import get_preset  # noqa: PLC0415 - lazy
 
-        fill_commission, fill_slippage = build_cost_funcs(cost_model)
+        cost = get_preset(cost_model)
+        fill_fees = cost.fees_fraction + cost.per_share / open_price
+        fill_slippage = cost.base_bps / 1e4
 
         pf = vbt.Portfolio.from_signals(
             close,
@@ -85,7 +85,11 @@ class VBTAdapter:
             init_cash=capital,
             freq="1D",
             upon_opposite_entry="Reverse",
-            fees=fill_commission,  # fraction of trade notional charged
+            size=0.99,
+            size_type="percent",
+            size_granularity=1.0,
+            fees=fill_fees,
+            fixed_fees=cost.flat_fee,
             slippage=fill_slippage,
             cash_sharing=True,
         )
@@ -117,6 +121,10 @@ class VBTAdapter:
                 "total_return_pct": float(pf.total_return() * 100),
                 "sharpe": float(pf.sharpe_ratio()),
                 "max_drawdown_pct": float(pf.max_drawdown() * 100),
+            },
+            metadata={
+                "cost_fidelity": _cost_fidelity(cost),
+                "cash_allocation_fraction": 0.99,
             },
         )
 
@@ -206,14 +214,29 @@ def _trade_record(row: pd.Series, ohlc: pd.DataFrame, idx: pd.Index):
     qty = _get("Size") or 0.0
     exit_ts = row.get("Exit Timestamp")
     exit_timestamp = pd.Timestamp(exit_ts) if exit_ts is not None and not pd.isna(exit_ts) else None
+    exit_price = _get("Avg Exit Price", "Exit Price")
+    entry_reference = float(ohlc.loc[ts, "open"])
+    slippage_cost = max((fill - entry_reference) * qty, 0.0)
+    if exit_timestamp is not None and exit_price is not None:
+        exit_reference = float(ohlc.loc[exit_timestamp, "open"])
+        slippage_cost += max((exit_reference - exit_price) * qty, 0.0)
     return TradeRecord(
         timestamp=pd.Timestamp(ts),
         symbol=sym,
         side="LONG",  # vbt OSS doesn't separately expose short without columns
         quantity=qty,
         fill_price=fill,
-        commission=0.0,
-        slippage_cost=0.0,
+        commission=(_get("Entry Fees") or 0.0) + (_get("Exit Fees") or 0.0),
+        slippage_cost=slippage_cost,
         exit_timestamp=exit_timestamp,
-        exit_price=_get("Avg Exit Price", "Exit Price"),
+        exit_price=exit_price,
     )
+
+
+def _cost_fidelity(cost) -> str:
+    limitations: list[str] = []
+    if cost.per_share and (cost.min_commission or cost.max_commission is not None):
+        limitations.append("per-share min/max commission is not representable by VectorBT")
+    if cost.slippage_model in {"linear_impact", "sqrt_impact"} and cost.impact_k:
+        limitations.append("volume impact is reduced to configured base bps")
+    return "exact" if not limitations else "; ".join(limitations)

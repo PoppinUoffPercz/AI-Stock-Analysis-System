@@ -52,7 +52,10 @@ def _run(adapter: object, signals: pd.DataFrame, ohlc: pd.DataFrame):
         ),
         (
             "extra timestamp",
-            lambda idx: (_signals(idx.append(pd.DatetimeIndex([idx[-1] + pd.Timedelta(days=1)]))), _ohlc(idx)),
+            lambda idx: (
+                _signals(idx.append(pd.DatetimeIndex([idx[-1] + pd.Timedelta(days=1)]))),
+                _ohlc(idx),
+            ),
         ),
         (
             "duplicate signal index",
@@ -68,7 +71,10 @@ def _run(adapter: object, signals: pd.DataFrame, ohlc: pd.DataFrame):
         ),
         (
             "extra column",
-            lambda idx: (_signals(idx, entry=[False] * 3, exit=[False] * 3, extra=[1] * 3), _ohlc(idx)),
+            lambda idx: (
+                _signals(idx, entry=[False] * 3, exit=[False] * 3, extra=[1] * 3),
+                _ohlc(idx),
+            ),
         ),
         (
             "missing entry column",

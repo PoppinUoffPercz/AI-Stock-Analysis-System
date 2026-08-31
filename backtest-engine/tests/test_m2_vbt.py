@@ -233,9 +233,10 @@ def test_vbt_adapter_fills_signals_at_next_open_and_skips_final_bar():
     trade = result.trades[0]
     assert trade.timestamp == idx[1]
     assert trade.fill_price == pytest.approx(250.0)
+    assert trade.quantity == pytest.approx(3.0)
     assert trade.exit_timestamp == idx[3]
     assert trade.exit_price == pytest.approx(499.0)
-    assert result.equity.tolist() == pytest.approx([1_000.0, 80.0, 120.0, 1_996.0])
+    assert result.equity.tolist() == pytest.approx([1_000.0, 310.0, 340.0, 1_747.0])
 
 
 @pytest.mark.smoke

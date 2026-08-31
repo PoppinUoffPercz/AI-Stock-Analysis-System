@@ -36,7 +36,12 @@ class _SignalDrivenStrategy(bt.Strategy):
     Backtrader-resolved timestamps). If `exit` is True and we're long, flatten.
     """
 
-    params = (("signals", None), ("cost_model_name", "zero"), ("trade_log", None))
+    params = (
+        ("signals", None),
+        ("cost_model_name", "zero"),
+        ("trade_log", None),
+        ("rejections", None),
+    )
 
     def __init__(self) -> None:
         self._entry = self.params.signals.get("entry")  # type: ignore[attr-defined]
@@ -46,10 +51,13 @@ class _SignalDrivenStrategy(bt.Strategy):
         # holds its own `self._trades` (DefaultDict keyed by data) set up by the
         # metaclass. Shadowing it crashes inside BT's notify path.
         self._trade_log: list = self.params.trade_log  # type: ignore[attr-defined]
+        self._rejections: list = self.params.rejections  # type: ignore[attr-defined]
         self._pending_order_ref: int | None = None
+        self._pending_action: tuple[str, str] | None = None
+        self._open_fill: TradeRecord | None = None
 
     def next(self) -> None:
-        if self._pending_order_ref is not None:
+        if self._pending_order_ref is not None or self._pending_action is not None:
             return
 
         # Backtrader feeds us naive datetime objects; the entry/exit series
@@ -67,17 +75,28 @@ class _SignalDrivenStrategy(bt.Strategy):
             exit_ = False
 
         pos = self.getposition(self.datas[0])
-        price = float(self.datas[0].close[0])
         sym = self.datas[0]._name or "UNKNOWN"
 
         if entry and pos.size == 0:
-            size = int(self.broker.getvalue() / max(price, 1e-6) * 0.99)
-            if size > 0:
-                order = self.buy(data=self.datas[0], size=size)
-                self._track_order(order, sym, side="LONG")
+            self._pending_action = ("LONG", sym)
         elif exit_ and pos.size > 0:
-            order = self.close(data=self.datas[0])
-            self._track_order(order, sym, side="EXIT")
+            self._pending_action = ("EXIT", sym)
+
+    def next_open(self) -> None:
+        """Execute the prior close's decision using the current opening price."""
+        if self._pending_action is None or self._pending_order_ref is not None:
+            return
+        side, sym = self._pending_action
+        self._pending_action = None
+        if side == "LONG":
+            price = float(self.datas[0].open[0])
+            size = int(self.broker.getcash() * 0.99 / max(price, 1e-6))
+            if size <= 0:
+                self._rejections.append({"side": side, "reason": "insufficient_cash"})
+                return
+            self._track_order(self.buy(data=self.datas[0], size=size), sym, side=side)
+        else:
+            self._track_order(self.close(data=self.datas[0]), sym, side=side)
 
     def _track_order(self, order, sym: str, side: str) -> None:
         if order is None:
@@ -106,17 +125,33 @@ class _SignalDrivenStrategy(bt.Strategy):
             # accounting and the trade log use the same executed-fill inputs.
             self.broker.cash -= commission + slippage_cost
             self.broker._get_value()  # refresh cached equity before analyzers run
-            self._trade_log.append(
-                TradeRecord(
-                    timestamp=timestamp,
-                    symbol=getattr(order.info, "symbol", "UNKNOWN"),
-                    side=getattr(order.info, "side", "LONG"),
-                    quantity=quantity,
-                    fill_price=fill_price,
-                    commission=commission,
-                    slippage_cost=slippage_cost,
-                )
+            fill = TradeRecord(
+                timestamp=timestamp,
+                symbol=getattr(order.info, "symbol", "UNKNOWN"),
+                side=getattr(order.info, "side", "LONG"),
+                quantity=quantity,
+                fill_price=fill_price,
+                commission=commission,
+                slippage_cost=slippage_cost,
             )
+            if fill.side == "LONG":
+                self._open_fill = fill
+            elif fill.side == "EXIT" and self._open_fill is not None:
+                entry = self._open_fill
+                self._trade_log.append(
+                    TradeRecord(
+                        timestamp=entry.timestamp,
+                        symbol=entry.symbol,
+                        side="LONG",
+                        quantity=min(entry.quantity, fill.quantity),
+                        fill_price=entry.fill_price,
+                        commission=entry.commission + fill.commission,
+                        slippage_cost=entry.slippage_cost + fill.slippage_cost,
+                        exit_timestamp=fill.timestamp,
+                        exit_price=fill.fill_price,
+                    )
+                )
+                self._open_fill = None
             self._pending_order_ref = None
         elif order.status in (
             order.Canceled,
@@ -124,6 +159,14 @@ class _SignalDrivenStrategy(bt.Strategy):
             order.Rejected,
             order.Expired,
         ):
+            rejections = getattr(self, "_rejections", None)
+            if rejections is not None:
+                rejections.append(
+                    {
+                        "side": getattr(order.info, "side", "UNKNOWN"),
+                        "reason": order.getstatusname(),
+                    }
+                )
             self._pending_order_ref = None
 
 
@@ -199,15 +242,17 @@ class BTAdapter:
         )
         feed._name = ohlc.attrs.get("symbol", "UNKNOWN")
 
-        cerebro = bt.Cerebro(stdstats=False)
+        cerebro = bt.Cerebro(stdstats=False, cheat_on_open=True)
         cerebro.broker.setcash(capital)
         cerebro.broker.set_coc(
             False
         )  # no cheat-on-close: fill at next bar open (look-ahead defense)
+        cerebro.broker.set_coo(True)
         cerebro.adddata(feed)
 
         # Build the strategy class with frozen args (Backtrader uses its params system).
         trade_log: list[TradeRecord] = []
+        rejections: list[dict[str, str]] = []
 
         # backtrader.Strategy subclass is instantiated by Cerebro. We deliver
         # state via .params (the dataclass on the class), so we wrap closure vars.
@@ -216,6 +261,7 @@ class BTAdapter:
                 ("signals", {"entry": sig_naive["entry"], "exit": sig_naive.get("exit")}),
                 ("cost_model_name", cost_model),
                 ("trade_log", trade_log),
+                ("rejections", rejections),
             )
 
         cerebro.addstrategy(_Bound)
@@ -252,4 +298,6 @@ class BTAdapter:
             equity=equity,
             returns=returns,
             trades=trade_log,
+            raw_metrics={"rejected_orders": len(rejections)},
+            metadata={"cash_allocation_fraction": 0.99},
         )

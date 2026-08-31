@@ -183,20 +183,15 @@ def test_bt_adapter_records_each_completed_order_with_execution_data():
         run_id="executed",
     )
 
-    assert len(result.trades) == 2
-    entry, exit_ = result.trades
-    assert (entry.timestamp, entry.quantity, entry.fill_price, entry.side) == (
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert (trade.timestamp, trade.quantity, trade.fill_price, trade.side) == (
         idx[1],
-        9.0,
+        99.0,
         10.0,
         "LONG",
     )
-    assert (exit_.timestamp, exit_.quantity, exit_.fill_price, exit_.side) == (
-        idx[3],
-        9.0,
-        30.0,
-        "EXIT",
-    )
+    assert (trade.exit_timestamp, trade.exit_price) == (idx[3], 30.0)
 
 
 @pytest.mark.parametrize("status", [bt.Order.Canceled, bt.Order.Margin, bt.Order.Rejected])

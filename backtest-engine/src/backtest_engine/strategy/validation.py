@@ -50,7 +50,9 @@ def _canonical_index(frame: pd.DataFrame, name: str) -> pd.DatetimeIndex:
     if not isinstance(index, pd.DatetimeIndex) or index.nlevels != 1:
         raise SignalValidationError(f"{name} index must be a one-dimensional DatetimeIndex")
     if index.tz is None:
-        raise SignalValidationError(f"{name} index must be timezone-aware so UTC instants are defined")
+        raise SignalValidationError(
+            f"{name} index must be timezone-aware so UTC instants are defined"
+        )
     if index.hasnans:
         raise SignalValidationError(f"{name} index must not contain NaT")
     canonical = index.tz_convert("UTC")

@@ -23,7 +23,7 @@ import backtrader as bt
 import pandas as pd
 
 from backtest_engine.execution.costs import get_preset
-from backtest_engine.strategy.result import BacktestResult, TradeRecord
+from backtest_engine.strategy.result import BacktestResult, TradeRecord, validate_backtest_result
 from backtest_engine.strategy.validation import validate_signal_frame
 
 
@@ -183,12 +183,12 @@ class _EquityAnalyzer(bt.Analyzer):
         ts = pd.Timestamp(bt_dt)
         eq = float(self.strategy.broker.getvalue())
         ts = ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC")
-        self._equity.append((ts.normalize(), eq))
+        self._equity.append((ts, eq))
         if self._prev_equity is not None and self._prev_equity > 0:
             r = eq / self._prev_equity - 1.0
         else:
             r = 0.0
-        self._returns.append((ts.normalize(), r))
+        self._returns.append((ts, r))
         self._prev_equity = eq
 
     def get_analysis(self) -> dict[str, pd.Series]:
@@ -296,25 +296,27 @@ class BTAdapter:
         total_execution_cost = total_commission + total_slippage
         net_final_equity = float(equity.iloc[-1]) if len(equity) else 0.0
 
-        return BacktestResult(
-            run_id=run_id or f"bt-{uuid.uuid4().hex[:8]}",
-            strategy_name=strategy_name,
-            engine=self.name,
-            params=dict(params),
-            capital=capital,
-            cost_model=cost_model,
-            universe_ref=universe_ref,
-            equity=equity,
-            returns=returns,
-            trades=trade_log,
-            raw_metrics={"rejected_orders": len(rejections)},
-            metadata={
-                "cost_fidelity": "exact",
-                "cash_allocation_fraction": 0.99,
-                "total_commission": total_commission,
-                "total_slippage": total_slippage,
-                "total_execution_cost": total_execution_cost,
-                "cost_addback_final_equity": net_final_equity + total_execution_cost,
-                "net_final_equity": net_final_equity,
-            },
+        return validate_backtest_result(
+            BacktestResult(
+                run_id=run_id or f"bt-{uuid.uuid4().hex[:8]}",
+                strategy_name=strategy_name,
+                engine=self.name,
+                params=dict(params),
+                capital=capital,
+                cost_model=cost_model,
+                universe_ref=universe_ref,
+                equity=equity,
+                returns=returns,
+                trades=trade_log,
+                raw_metrics={"rejected_orders": len(rejections)},
+                metadata={
+                    "cost_fidelity": "exact",
+                    "cash_allocation_fraction": 0.99,
+                    "total_commission": total_commission,
+                    "total_slippage": total_slippage,
+                    "total_execution_cost": total_execution_cost,
+                    "cost_addback_final_equity": net_final_equity + total_execution_cost,
+                    "net_final_equity": net_final_equity,
+                },
+            )
         )

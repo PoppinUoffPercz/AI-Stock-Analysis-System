@@ -11,12 +11,13 @@ Portability note (plan section 3):
 
 from __future__ import annotations
 
+import math
 import uuid
 from typing import Any
 
 import pandas as pd
 
-from backtest_engine.strategy.result import BacktestResult
+from backtest_engine.strategy.result import BacktestResult, validate_backtest_result
 from backtest_engine.strategy.spec import SignalFactory
 from backtest_engine.strategy.validation import validate_signal_frame
 
@@ -110,31 +111,33 @@ class VBTAdapter:
         total_execution_cost = total_commission + total_slippage
         net_final_equity = float(equity.iloc[-1]) if len(equity) else 0.0
 
-        return BacktestResult(
-            run_id=run_id or f"vbt-{uuid.uuid4().hex[:8]}",
-            strategy_name=strategy_name,
-            engine=self.name,
-            params=dict(params),
-            capital=capital,
-            cost_model=cost_model,
-            universe_ref=universe_ref,
-            equity=equity,
-            returns=returns,
-            trades=trades,
-            raw_metrics={
-                "total_return_pct": float(pf.total_return() * 100),
-                "sharpe": float(pf.sharpe_ratio()),
-                "max_drawdown_pct": float(pf.max_drawdown() * 100),
-            },
-            metadata={
-                "cost_fidelity": "exact",
-                "cash_allocation_fraction": 0.99,
-                "total_commission": total_commission,
-                "total_slippage": total_slippage,
-                "total_execution_cost": total_execution_cost,
-                "cost_addback_final_equity": net_final_equity + total_execution_cost,
-                "net_final_equity": net_final_equity,
-            },
+        return validate_backtest_result(
+            BacktestResult(
+                run_id=run_id or f"vbt-{uuid.uuid4().hex[:8]}",
+                strategy_name=strategy_name,
+                engine=self.name,
+                params=dict(params),
+                capital=capital,
+                cost_model=cost_model,
+                universe_ref=universe_ref,
+                equity=equity,
+                returns=returns,
+                trades=trades,
+                raw_metrics={
+                    "total_return_pct": float(pf.total_return() * 100),
+                    "sharpe": _finite_or_none(pf.sharpe_ratio()),
+                    "max_drawdown_pct": float(pf.max_drawdown() * 100),
+                },
+                metadata={
+                    "cost_fidelity": "exact",
+                    "cash_allocation_fraction": 0.99,
+                    "total_commission": total_commission,
+                    "total_slippage": total_slippage,
+                    "total_execution_cost": total_execution_cost,
+                    "cost_addback_final_equity": net_final_equity + total_execution_cost,
+                    "net_final_equity": net_final_equity,
+                },
+            )
         )
 
     # --- parameter sweep ---------------------------------------------------
@@ -191,6 +194,11 @@ def _cartesian(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _finite_or_none(value: object) -> float | None:
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
 def _align_series(arr) -> pd.Series:
     """Convert vbt's index to tz-aware UTC if needed."""
     if isinstance(arr, pd.Series):
@@ -224,9 +232,7 @@ def _trade_record(row: pd.Series, ohlc: pd.DataFrame, idx: pd.Index):
     is_open = row.get("Status") == "Open"
     exit_ts = row.get("Exit Timestamp")
     exit_timestamp = (
-        None
-        if is_open or exit_ts is None or pd.isna(exit_ts)
-        else pd.Timestamp(exit_ts)
+        None if is_open or exit_ts is None or pd.isna(exit_ts) else pd.Timestamp(exit_ts)
     )
     exit_price = None if is_open else _get("Avg Exit Price", "Exit Price")
     entry_reference = float(ohlc.loc[ts, "open"])

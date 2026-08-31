@@ -9,13 +9,16 @@ venue.
 
 from __future__ import annotations
 
+import math
 import uuid
+from collections.abc import Mapping
 from importlib import import_module
+from numbers import Real
 from typing import Any, cast
 
 import pandas as pd
 
-from backtest_engine.strategy.result import BacktestResult, TradeRecord
+from backtest_engine.strategy.result import BacktestResult, TradeRecord, validate_backtest_result
 
 
 def _import_nautilus() -> dict[str, Any]:
@@ -154,6 +157,19 @@ def _trade_records(report: pd.DataFrame, *, symbol: str) -> list[TradeRecord]:
             )
         )
     return records
+
+
+def _sanitize_metrics(value: Any) -> Any:
+    """Replace undefined third-party metric values without touching result inputs."""
+    if isinstance(value, Mapping):
+        return {key: _sanitize_metrics(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_metrics(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_metrics(item) for item in value)
+    if isinstance(value, Real) and not isinstance(value, bool) and not math.isfinite(float(value)):
+        return None
+    return value
 
 
 def _equity_from_fills(
@@ -332,18 +348,22 @@ class NautilusAdapter:
             if equity.empty:
                 equity = _report_series(account_report, capital=capital)
             returns = equity.pct_change().fillna(0.0)
-            return BacktestResult(
-                run_id=run_id or f"nautilus-{uuid.uuid4().hex[:8]}",
-                strategy_name=strategy_name,
-                engine=self.name,
-                params=dict(params),
-                capital=capital,
-                cost_model=cost_model,
-                universe_ref=universe_ref,
-                equity=equity,
-                returns=returns,
-                trades=trades,
-                raw_metrics={"nautilus_stats": engine.get_result().stats_returns},
+            return validate_backtest_result(
+                BacktestResult(
+                    run_id=run_id or f"nautilus-{uuid.uuid4().hex[:8]}",
+                    strategy_name=strategy_name,
+                    engine=self.name,
+                    params=dict(params),
+                    capital=capital,
+                    cost_model=cost_model,
+                    universe_ref=universe_ref,
+                    equity=equity,
+                    returns=returns,
+                    trades=trades,
+                    raw_metrics={
+                        "nautilus_stats": _sanitize_metrics(engine.get_result().stats_returns)
+                    },
+                )
             )
         finally:
             engine.dispose()

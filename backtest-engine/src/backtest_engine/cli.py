@@ -117,7 +117,9 @@ def _build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("discover", help="Phase 1 - VectorBT discovery (single persisted-data run)")
     d.add_argument("--strategy", required=True, choices=sorted(REGISTRY))
     d.add_argument(
-        "--cost", default="zero", help="Cost model preset (zero|us_equity_pershare|us_equity_flat)"
+        "--cost",
+        default="zero",
+        help="Cost model preset (zero|us_equity_proportional|us_equity_pershare|us_equity_flat)",
     )
     d.add_argument("--capital", type=float, default=100_000)
     d.add_argument("--days", type=int, default=252 * 3)

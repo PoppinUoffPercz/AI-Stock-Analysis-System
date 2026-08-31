@@ -71,9 +71,13 @@ class VBTAdapter:
 
         # `freq` controls time-based metrics; it does not shift fills. The
         # explicit signal shift above is therefore part of the fill policy.
-        from backtest_engine.execution.costs import get_preset  # noqa: PLC0415 - lazy
+        from backtest_engine.execution.costs import (  # noqa: PLC0415 - lazy
+            get_preset,
+            require_exact_vectorbt_costs,
+        )
 
         cost = get_preset(cost_model)
+        require_exact_vectorbt_costs(cost)
         fill_fees = cost.fees_fraction + cost.per_share / open_price
         fill_slippage = cost.base_bps / 1e4
 
@@ -98,13 +102,13 @@ class VBTAdapter:
         equity = _align_series(pf.value())
         returns = _align_series(pf.returns())
 
-        trades: list = []
-        try:
-            tr = pf.trades.records_readable
-            for _, row in tr.iterrows():
-                trades.append(_trade_record(row, ohlc, signals.index))
-        except Exception:  # noqa: BLE001 - no trades is fine; vbt may return empty df
-            trades = []
+        tr = pf.trades.records_readable
+        trades = [_trade_record(row, ohlc, signals.index) for _, row in tr.iterrows()]
+
+        total_commission = sum(trade.commission for trade in trades)
+        total_slippage = sum(trade.slippage_cost for trade in trades)
+        total_execution_cost = total_commission + total_slippage
+        net_final_equity = float(equity.iloc[-1]) if len(equity) else 0.0
 
         return BacktestResult(
             run_id=run_id or f"vbt-{uuid.uuid4().hex[:8]}",
@@ -123,8 +127,13 @@ class VBTAdapter:
                 "max_drawdown_pct": float(pf.max_drawdown() * 100),
             },
             metadata={
-                "cost_fidelity": _cost_fidelity(cost),
+                "cost_fidelity": "exact",
                 "cash_allocation_fraction": 0.99,
+                "total_commission": total_commission,
+                "total_slippage": total_slippage,
+                "total_execution_cost": total_execution_cost,
+                "cost_addback_final_equity": net_final_equity + total_execution_cost,
+                "net_final_equity": net_final_equity,
             },
         )
 
@@ -212,9 +221,14 @@ def _trade_record(row: pd.Series, ohlc: pd.DataFrame, idx: pd.Index):
     sym = ohlc.attrs.get("symbol", "UNKNOWN")
     fill = _get("Avg Entry Price", "Entry Price") or 0.0
     qty = _get("Size") or 0.0
+    is_open = row.get("Status") == "Open"
     exit_ts = row.get("Exit Timestamp")
-    exit_timestamp = pd.Timestamp(exit_ts) if exit_ts is not None and not pd.isna(exit_ts) else None
-    exit_price = _get("Avg Exit Price", "Exit Price")
+    exit_timestamp = (
+        None
+        if is_open or exit_ts is None or pd.isna(exit_ts)
+        else pd.Timestamp(exit_ts)
+    )
+    exit_price = None if is_open else _get("Avg Exit Price", "Exit Price")
     entry_reference = float(ohlc.loc[ts, "open"])
     slippage_cost = max((fill - entry_reference) * qty, 0.0)
     if exit_timestamp is not None and exit_price is not None:
@@ -226,17 +240,8 @@ def _trade_record(row: pd.Series, ohlc: pd.DataFrame, idx: pd.Index):
         side="LONG",  # vbt OSS doesn't separately expose short without columns
         quantity=qty,
         fill_price=fill,
-        commission=(_get("Entry Fees") or 0.0) + (_get("Exit Fees") or 0.0),
+        commission=(_get("Entry Fees") or 0.0) + (0.0 if is_open else (_get("Exit Fees") or 0.0)),
         slippage_cost=slippage_cost,
         exit_timestamp=exit_timestamp,
         exit_price=exit_price,
     )
-
-
-def _cost_fidelity(cost) -> str:
-    limitations: list[str] = []
-    if cost.per_share and (cost.min_commission or cost.max_commission is not None):
-        limitations.append("per-share min/max commission is not representable by VectorBT")
-    if cost.slippage_model in {"linear_impact", "sqrt_impact"} and cost.impact_k:
-        limitations.append("volume impact is reduced to configured base bps")
-    return "exact" if not limitations else "; ".join(limitations)

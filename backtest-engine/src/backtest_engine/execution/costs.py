@@ -143,6 +143,18 @@ def get_preset(name: CostPreset) -> CostModel:
     return PRESETS[name]
 
 
+def require_exact_vectorbt_costs(cost: CostModel) -> None:
+    """Reject cost models VectorBT cannot apply per fill without approximation."""
+    if cost.per_share and (cost.min_commission or cost.max_commission is not None):
+        raise ValueError(
+            f"VectorBT cannot represent {cost.preset!r} commission exactly"
+        )
+    if cost.slippage_model in {"linear_impact", "sqrt_impact"} and cost.impact_k:
+        raise ValueError(
+            f"VectorBT cannot represent {cost.preset!r} volume-impact slippage exactly"
+        )
+
+
 def build_cost_funcs(name: CostPreset | str) -> tuple[float, float]:
     """Return (vbt_fees_fraction, vbt_slippage_fraction) used by VBTAdapter.
 
@@ -153,5 +165,6 @@ def build_cost_funcs(name: CostPreset | str) -> tuple[float, float]:
     if name not in PRESETS:
         raise ValueError(f"unknown cost preset: {name!r}")
     cm = PRESETS[name]
+    require_exact_vectorbt_costs(cm)
     slippage_fraction = cm.base_bps / 1e4
     return cm.fees_fraction, slippage_fraction

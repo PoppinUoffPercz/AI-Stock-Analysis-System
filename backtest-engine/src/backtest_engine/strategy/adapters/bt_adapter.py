@@ -287,6 +287,15 @@ class BTAdapter:
         if not returns.empty and returns.index.tz is None:
             returns.index = returns.index.tz_localize("UTC")
 
+        open_fill = strat._open_fill
+        if open_fill is not None:
+            trade_log.append(open_fill)
+
+        total_commission = sum(trade.commission for trade in trade_log)
+        total_slippage = sum(trade.slippage_cost for trade in trade_log)
+        total_execution_cost = total_commission + total_slippage
+        net_final_equity = float(equity.iloc[-1]) if len(equity) else 0.0
+
         return BacktestResult(
             run_id=run_id or f"bt-{uuid.uuid4().hex[:8]}",
             strategy_name=strategy_name,
@@ -299,5 +308,13 @@ class BTAdapter:
             returns=returns,
             trades=trade_log,
             raw_metrics={"rejected_orders": len(rejections)},
-            metadata={"cash_allocation_fraction": 0.99},
+            metadata={
+                "cost_fidelity": "exact",
+                "cash_allocation_fraction": 0.99,
+                "total_commission": total_commission,
+                "total_slippage": total_slippage,
+                "total_execution_cost": total_execution_cost,
+                "cost_addback_final_equity": net_final_equity + total_execution_cost,
+                "net_final_equity": net_final_equity,
+            },
         )

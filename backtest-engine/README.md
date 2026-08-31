@@ -43,6 +43,17 @@ For the reproducible real-data acceptance workflow, run
 `python -m scripts.run_v1_acceptance` from this directory after the clean cache
 is available.
 
+For a deterministic, network-free end-to-end acceptance demo using checked-in
+CSV fixtures, run `python -m scripts.run_offline_demo`. Pass
+`--output-root <path>` to write artifacts elsewhere. The command prints PASS or
+FAIL checks and exits nonzero on failure; its report disables QuantStats and
+Plotly so it has no network or CDN requirements.
+
+To measure the fixed representative VectorBT `run_spec` workload without a CI
+performance threshold, run `python -m scripts.benchmark_runtime`. The JSON output
+includes elapsed seconds, workload dimensions, Python/platform details, and
+relevant dependency versions.
+
 ## Status
 
 v1 research and validation milestones M0-M8 are implemented. The M9 boundary

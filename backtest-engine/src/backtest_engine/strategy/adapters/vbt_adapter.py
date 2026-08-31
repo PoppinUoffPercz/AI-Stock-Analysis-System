@@ -11,13 +11,15 @@ Portability note (plan section 3):
 
 from __future__ import annotations
 
+import math
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
-from backtest_engine.strategy.result import BacktestResult
+from backtest_engine.strategy.result import BacktestResult, validate_backtest_result
 from backtest_engine.strategy.spec import SignalFactory
+from backtest_engine.strategy.validation import validate_signal_frame
 
 
 def _import_vbt():
@@ -49,9 +51,10 @@ class VBTAdapter:
     ) -> BacktestResult:
         """Execute a single backtest from pre-computed entry/exit signals.
 
-        `signals` must have either `entry` and `exit` boolean columns aligned
-        with `ohlc`'s index, or a single `signals`/`positions` signed column.
+        `signals` must have an `entry` boolean column and may have an `exit`
+        boolean column. Both must be aligned with `ohlc`'s index.
         """
+        signals = validate_signal_frame(signals, ohlc)
         vbt = self._vbt or _import_vbt()
         self._vbt = vbt
 
@@ -70,10 +73,14 @@ class VBTAdapter:
         # `freq` controls time-based metrics; it does not shift fills. The
         # explicit signal shift above is therefore part of the fill policy.
         from backtest_engine.execution.costs import (  # noqa: PLC0415 - lazy
-            build_cost_funcs,
+            get_preset,
+            require_exact_vectorbt_costs,
         )
 
-        fill_commission, fill_slippage = build_cost_funcs(cost_model)
+        cost = get_preset(cost_model)
+        require_exact_vectorbt_costs(cost)
+        fill_fees = cost.fees_fraction + cost.per_share / open_price
+        fill_slippage = cost.base_bps / 1e4
 
         pf = vbt.Portfolio.from_signals(
             close,
@@ -83,7 +90,11 @@ class VBTAdapter:
             init_cash=capital,
             freq="1D",
             upon_opposite_entry="Reverse",
-            fees=fill_commission,  # fraction of trade notional charged
+            size=0.99,
+            size_type="percent",
+            size_granularity=1.0,
+            fees=fill_fees,
+            fixed_fees=cost.flat_fee,
             slippage=fill_slippage,
             cash_sharing=True,
         )
@@ -92,30 +103,41 @@ class VBTAdapter:
         equity = _align_series(pf.value())
         returns = _align_series(pf.returns())
 
-        trades: list = []
-        try:
-            tr = pf.trades.records_readable
-            for _, row in tr.iterrows():
-                trades.append(_trade_record(row, ohlc, signals.index))
-        except Exception:  # noqa: BLE001 - no trades is fine; vbt may return empty df
-            trades = []
+        tr = pf.trades.records_readable
+        trades = [_trade_record(row, ohlc, signals.index) for _, row in tr.iterrows()]
 
-        return BacktestResult(
-            run_id=run_id or f"vbt-{uuid.uuid4().hex[:8]}",
-            strategy_name=strategy_name,
-            engine=self.name,
-            params=dict(params),
-            capital=capital,
-            cost_model=cost_model,
-            universe_ref=universe_ref,
-            equity=equity,
-            returns=returns,
-            trades=trades,
-            raw_metrics={
-                "total_return_pct": float(pf.total_return() * 100),
-                "sharpe": float(pf.sharpe_ratio()),
-                "max_drawdown_pct": float(pf.max_drawdown() * 100),
-            },
+        total_commission = sum(trade.commission for trade in trades)
+        total_slippage = sum(trade.slippage_cost for trade in trades)
+        total_execution_cost = total_commission + total_slippage
+        net_final_equity = float(equity.iloc[-1]) if len(equity) else 0.0
+
+        return validate_backtest_result(
+            BacktestResult(
+                run_id=run_id or f"vbt-{uuid.uuid4().hex[:8]}",
+                strategy_name=strategy_name,
+                engine=self.name,
+                params=dict(params),
+                capital=capital,
+                cost_model=cost_model,
+                universe_ref=universe_ref,
+                equity=equity,
+                returns=returns,
+                trades=trades,
+                raw_metrics={
+                    "total_return_pct": float(pf.total_return() * 100),
+                    "sharpe": _finite_or_none(pf.sharpe_ratio()),
+                    "max_drawdown_pct": float(pf.max_drawdown() * 100),
+                },
+                metadata={
+                    "cost_fidelity": "exact",
+                    "cash_allocation_fraction": 0.99,
+                    "total_commission": total_commission,
+                    "total_slippage": total_slippage,
+                    "total_execution_cost": total_execution_cost,
+                    "cost_addback_final_equity": net_final_equity + total_execution_cost,
+                    "net_final_equity": net_final_equity,
+                },
+            )
         )
 
     # --- parameter sweep ---------------------------------------------------
@@ -139,11 +161,7 @@ class VBTAdapter:
         vectorized already because the underlying vbt.Portfolio is array-aware.
         """
         results: list[BacktestResult] = []
-        param_names = list(param_grid.keys())
-        # cartesian product of all param values
-        grids = pd.DataFrame(_cartesian(param_grid)).rename(columns=dict(enumerate(param_names)))
-        for _, row in grids.iterrows():
-            params = {k: row[k] for k in param_names}
+        for params in _cartesian(param_grid):
             signals = signal_factory(ohlc, params)
             res = self.run(
                 signals,
@@ -170,6 +188,11 @@ def _cartesian(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
         dict(zip(keys, combo, strict=False))
         for combo in itertools.product(*[grid[k] for k in keys])
     ]
+
+
+def _finite_or_none(value: object) -> float | None:
+    number = float(cast(Any, value))
+    return number if math.isfinite(number) else None
 
 
 def _align_series(arr) -> pd.Series:
@@ -202,16 +225,25 @@ def _trade_record(row: pd.Series, ohlc: pd.DataFrame, idx: pd.Index):
     sym = ohlc.attrs.get("symbol", "UNKNOWN")
     fill = _get("Avg Entry Price", "Entry Price") or 0.0
     qty = _get("Size") or 0.0
+    is_open = row.get("Status") == "Open"
     exit_ts = row.get("Exit Timestamp")
-    exit_timestamp = pd.Timestamp(exit_ts) if exit_ts is not None and not pd.isna(exit_ts) else None
+    exit_timestamp = (
+        None if is_open or exit_ts is None or pd.isna(exit_ts) else pd.Timestamp(exit_ts)
+    )
+    exit_price = None if is_open else _get("Avg Exit Price", "Exit Price")
+    entry_reference = float(cast(Any, ohlc.loc[ts, "open"]))
+    slippage_cost = max((fill - entry_reference) * qty, 0.0)
+    if exit_timestamp is not None and exit_price is not None:
+        exit_reference = float(cast(Any, ohlc.loc[exit_timestamp, "open"]))
+        slippage_cost += max((exit_reference - exit_price) * qty, 0.0)
     return TradeRecord(
         timestamp=pd.Timestamp(ts),
         symbol=sym,
         side="LONG",  # vbt OSS doesn't separately expose short without columns
         quantity=qty,
         fill_price=fill,
-        commission=0.0,
-        slippage_cost=0.0,
+        commission=(_get("Entry Fees") or 0.0) + (0.0 if is_open else (_get("Exit Fees") or 0.0)),
+        slippage_cost=slippage_cost,
         exit_timestamp=exit_timestamp,
-        exit_price=_get("Avg Exit Price", "Exit Price"),
+        exit_price=exit_price,
     )

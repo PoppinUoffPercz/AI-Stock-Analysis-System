@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from backtest_engine.data.store import CLEAN_COLUMNS, TIMESTAMP_TZ
+from backtest_engine.data.store import CLEAN_COLUMNS
 
 # Ohlc sanity checks. Catches typos / corrupted source rows.
 OHLC_INVARIANTS = (
@@ -42,14 +42,22 @@ def validate_clean(df: pd.DataFrame, *, source: str) -> pd.DataFrame:
         raise CleanError(f"missing required columns: {missing}")
 
     d = df.copy()
-    if not isinstance(d["timestamp"].dtype, pd.DatetimeTZDtype):
+    try:
         d["timestamp"] = pd.to_datetime(d["timestamp"], utc=True)
-    if d["timestamp"].dt.tz is None:
-        d["timestamp"] = d["timestamp"].dt.tz_localize(TIMESTAMP_TZ)
+    except (TypeError, ValueError) as exc:
+        raise CleanError("invalid timestamp values; expected timezone-aware datetimes") from exc
+    if d["timestamp"].isna().any():
+        raise CleanError("timestamp must not contain NaT")
 
-    # Drop duplicate timestamps; keep first to avoid look-ahead ambiguity.
-    if d["timestamp"].duplicated().any():
-        d = d.drop_duplicates(subset="timestamp", keep="first")
+    # Exact duplicate rows are safe to collapse; conflicting values are not.
+    duplicate_rows = d[d["timestamp"].duplicated(keep=False)]
+    for timestamp, group in duplicate_rows.groupby("timestamp", sort=False):
+        if len(group.drop_duplicates()) > 1:
+            varying = [column for column in d.columns if group[column].nunique(dropna=False) > 1]
+            raise CleanError(
+                f"conflicting duplicate timestamp {timestamp}: values differ in {varying}"
+            )
+    d = d.drop_duplicates(keep="first")
     # Monotonic must hold post-sort.
     d = d.sort_values("timestamp")
     if not d["timestamp"].is_monotonic_increasing:

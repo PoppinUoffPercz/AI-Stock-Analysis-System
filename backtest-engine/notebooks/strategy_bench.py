@@ -156,6 +156,7 @@ def run_walk_forward(
             engine="vectorbt",
             params=kw.get("params", spec_.params),
             run_id=kw.get("run_id", "wf"),
+            signal_ohlc=kw.get("signal_ohlc"),
         )
 
     result = walk_forward(

@@ -11,26 +11,7 @@ from ta_lib import compute_rsi, compute_macd, compute_smas, compute_volume_ratio
 from smart_money import get_smart_money_score
 from reflection import ReflectionLog
 import entry_timing
-
-
-def extract_news_fields(news_list):
-    """Normalize yfinance 1.5.x news format (content nested dict) and legacy format."""
-    parsed = []
-    for item in news_list:
-        content = item.get("content", item)
-        title = content.get("title", "")
-        provider_info = content.get("provider", {})
-        publisher = provider_info.get("displayName", content.get("publisher", "Unknown"))
-        canonical = content.get("canonicalUrl", {})
-        link = canonical.get("url", content.get("link", ""))
-        pub_date = content.get("pubDate", "")
-        parsed.append({
-            "title": title,
-            "publisher": publisher,
-            "link": link,
-            "pubDate": pub_date
-        })
-    return parsed
+from news_utils import extract_news_fields
 
 
 def _discovery_tickers(limit=80, lists=("losers", "undervalued_large_caps")):
@@ -172,7 +153,7 @@ class ScionScreener:
         if not news_raw:
             return 0.0, "No news available"
 
-        news_list = extract_news_fields(news_raw)
+        news_list = extract_news_fields(news_raw, legacy=True)
 
         # Keywords showing panic ("ick" factor) vs. positive reversals
         ick_keywords = [

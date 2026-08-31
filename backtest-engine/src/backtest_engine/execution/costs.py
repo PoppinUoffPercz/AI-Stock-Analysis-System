@@ -32,7 +32,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 SlipModel = Literal["zero", "fixed_bps", "linear_impact", "sqrt_impact"]
-CostPreset = Literal["us_equity_pershare", "us_equity_flat", "zero"]
+CostPreset = Literal[
+    "us_equity_pershare",
+    "us_equity_flat",
+    "us_equity_proportional",
+    "zero",
+]
 
 
 @dataclass(frozen=True)
@@ -53,11 +58,14 @@ class CostModel:
     # Slippage params
     base_bps: float  # bps added to every fill
     impact_k: float  # coefficient for impact models
-    # vbt expects commission as fraction-of-notional.
-    fees_fraction: float  # fraction per fill; mirrors "fees" param in vbt.Portfolio.from_signals
+    # Proportional commission as a fraction of executed notional.
+    fees_fraction: float
 
     def commission(self, shares: float, price: float) -> float:
-        c = max(self.per_share * abs(shares), self.flat_fee)
+        size = abs(shares)
+        if size == 0:
+            return 0.0
+        c = self.flat_fee + self.per_share * size + self.fees_fraction * size * price
         c = max(c, self.min_commission)
         if self.max_commission is not None:
             c = min(c, self.max_commission)
@@ -106,6 +114,17 @@ PRESETS: dict[CostPreset, CostModel] = {
         impact_k=20.0,
         fees_fraction=0.0,
     ),
+    "us_equity_proportional": CostModel(
+        preset="us_equity_proportional",
+        slippage_model="fixed_bps",
+        per_share=0.0,
+        flat_fee=0.0,
+        min_commission=0.0,
+        max_commission=None,
+        base_bps=0.0,
+        impact_k=0.0,
+        fees_fraction=0.001,
+    ),
     "zero": CostModel(
         preset="zero",
         slippage_model="zero",
@@ -120,25 +139,32 @@ PRESETS: dict[CostPreset, CostModel] = {
 }
 
 
-def get_preset(name: CostPreset) -> CostModel:
+def get_preset(name: CostPreset | str) -> CostModel:
+    if name not in PRESETS:
+        raise ValueError(f"unknown cost preset: {name!r}")
     return PRESETS[name]
+
+
+def require_exact_vectorbt_costs(cost: CostModel) -> None:
+    """Reject cost models VectorBT cannot apply per fill without approximation."""
+    if cost.per_share and (cost.min_commission or cost.max_commission is not None):
+        raise ValueError(f"VectorBT cannot represent {cost.preset!r} commission exactly")
+    if cost.slippage_model in {"linear_impact", "sqrt_impact"} and cost.impact_k:
+        raise ValueError(
+            f"VectorBT cannot represent {cost.preset!r} volume-impact slippage exactly"
+        )
 
 
 def build_cost_funcs(name: CostPreset | str) -> tuple[float, float]:
     """Return (vbt_fees_fraction, vbt_slippage_fraction) used by VBTAdapter.
 
-    VectorBT's fees/slippage arguments are *fraction-of-trade-notional*. We map
-    our per-share commission to a fraction by assuming a typical share price
-    (configurable later). The slippage fraction defaults to the model's base_bps
-    since vbt's per-trade slippage is too coarse for volume-impact logic — that
-    path is honored properly in the Phase 2 (Backtrader) broker.
+    This legacy scalar helper exposes only the exactly proportional component.
+    Adapters that need flat or per-share fees must use the actual execution
+    price instead of inventing a representative price.
     """
     if name not in PRESETS:
         raise ValueError(f"unknown cost preset: {name!r}")
     cm = PRESETS[name]
-    # Convert per_share to fraction assuming a typical $50 share (estimate fixed
-    # at config-time is fine for Phase 1; final accounting is in Backtrader broker).
-    notional_estimate = 50.0
-    fees_fraction = cm.flat_fee / notional_estimate + cm.per_share / notional_estimate
+    require_exact_vectorbt_costs(cm)
     slippage_fraction = cm.base_bps / 1e4
-    return fees_fraction, slippage_fraction
+    return cm.fees_fraction, slippage_fraction

@@ -15,6 +15,7 @@ import pytest
 from backtest_engine.metrics.core import total_return
 from backtest_engine.pipeline.discovery import get_adapter, run_spec
 from backtest_engine.strategy.adapters.bt_adapter import BTAdapter
+from backtest_engine.strategy.adapters.nautilus_adapter import _sanitize_metrics
 from backtest_engine.strategy.adapters.vbt_adapter import VBTAdapter
 from backtest_engine.strategy.base import EngineAdapter
 from backtest_engine.strategy.builtin import sma_cross
@@ -131,3 +132,15 @@ def test_nautilus_replay_preserves_the_shared_daily_fixture():
     assert len(result.equity) == len(ohlc)
     assert result.equity.index.equals(ohlc.index)
     assert result.n_trades > 0
+
+
+def test_nautilus_stats_normalize_undefined_metrics_at_adapter_boundary():
+    stats = {
+        "Returns Volatility (252 days)": float("nan"),
+        "Nested": [{"ratio": float("inf"), "valid": 1.5}],
+    }
+
+    assert _sanitize_metrics(stats) == {
+        "Returns Volatility (252 days)": None,
+        "Nested": [{"ratio": None, "valid": 1.5}],
+    }

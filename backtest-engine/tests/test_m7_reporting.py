@@ -53,6 +53,12 @@ def test_render_report_writes_html_and_metrics(tmp_path: Path):
     assert rr.html_path == out_dir / "report.html"
     assert rr.html_path.exists()
     assert (out_dir / "metrics.json").exists()
+    assert (out_dir / "manifest.json").exists()
+    entries = [
+        json.loads(line) for line in (tmp_path / "experiments.jsonl").read_text().splitlines()
+    ]
+    assert entries[0]["run_id"] == "m7-test"
+    assert entries[0]["artifacts"]["result"] == "r1/result.json"
 
     loaded = json.loads((out_dir / "metrics.json").read_text())
     for key in ("total_return", "sharpe", "max_drawdown"):
@@ -63,7 +69,7 @@ def test_render_report_bias_flags_present(tmp_path: Path):
     # Force a high sharpe by sending a stable positive return (low vol).
     n = 100
     idx = pd.bdate_range("2020-01-01", periods=n).tz_localize("UTC")
-    rr = pd.Series([0.001] * n, index=idx)
+    rr = pd.Series([0.0] + [0.001] * (n - 1), index=idx)
     eq = (1 + rr).cumprod() * 100
     result = BacktestResult(
         run_id="m7-sharpe",

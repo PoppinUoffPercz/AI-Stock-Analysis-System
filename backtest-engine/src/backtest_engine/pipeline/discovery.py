@@ -6,10 +6,14 @@ the BacktestResult. Used by both the CLI (M8) and by validation layer (M6).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from backtest_engine.benchmark import attach_buy_and_hold_benchmark
+from backtest_engine.data.universe import Universe
+from backtest_engine.reproducibility import build_manifest
 from backtest_engine.strategy.adapters.bt_adapter import BTAdapter
 from backtest_engine.strategy.adapters.vbt_adapter import VBTAdapter
 from backtest_engine.strategy.base import EngineAdapter
@@ -41,14 +45,39 @@ def run_spec(
     capital: float | None = None,
     params: dict[str, Any] | None = None,
     run_id: str | None = None,
+    universe: Universe | str | Path | None = None,
+    random_seed: int | None = None,
+    relevant_args: dict[str, Any] | None = None,
+    dataset_identity: dict[str, Any] | None = None,
+    signal_ohlc: pd.DataFrame | None = None,
 ) -> BacktestResult:
-    """Execute `spec` through `engine`. Adapter maps spec -> result."""
+    """Execute `spec` through `engine`, optionally enforcing point-in-time membership."""
+    active_universe = None
+    if universe is not None:
+        active_universe = (
+            universe if isinstance(universe, Universe) else Universe.from_csv(universe)
+        )
+        ohlc = active_universe.filter_panel(ohlc)
+        if ohlc.empty:
+            raise ValueError("universe excludes every input bar")
     adapter = get_adapter(engine)
     use_cost = cost_model or spec.cost_model
     use_cap = capital if capital is not None else spec.capital
-    use_params = params or spec.params
-    signals = spec.make_signals(ohlc, use_params)
-    return adapter.run(
+    use_params = params if params is not None else spec.params
+    signal_bars = signal_ohlc if signal_ohlc is not None else ohlc
+    if active_universe is not None and signal_ohlc is not None:
+        signal_bars = active_universe.filter_panel(signal_bars)
+    if signal_ohlc is not None:
+        missing = ohlc.index.difference(signal_bars.index)
+        if not missing.empty:
+            raise ValueError(
+                f"signal_ohlc does not cover {len(missing)} execution timestamp(s); first missing: "
+                f"{missing[0]}"
+            )
+    signals = spec.make_signals(signal_bars, use_params)
+    if signal_ohlc is not None:
+        signals = signals.loc[ohlc.index]
+    result = adapter.run(
         signals,
         ohlc,
         capital=use_cap,
@@ -58,3 +87,37 @@ def run_spec(
         params=use_params,
         run_id=run_id,
     )
+    if not isinstance(result, BacktestResult):
+        return result
+    if use_cost == "zero" or engine == "nautilus":
+        gross_result = result
+    else:
+        gross_result = adapter.run(
+            signals,
+            ohlc,
+            capital=use_cap,
+            cost_model="zero",
+            strategy_name=spec.name,
+            universe_ref=spec.universe_ref,
+            params=use_params,
+            run_id=None,
+        )
+    result.metadata["strategy_gross_return"] = gross_result.final_equity / use_cap - 1.0
+    attach_buy_and_hold_benchmark(result, ohlc)
+    result.manifest = build_manifest(
+        run_id=result.run_id,
+        strategy_name=spec.name,
+        signal_factory=spec.signal_factory,
+        engine=result.engine,
+        params=use_params,
+        capital=use_cap,
+        cost_model=use_cost,
+        universe_ref=spec.universe_ref,
+        ohlc=ohlc,
+        signal_ohlc=signal_bars if signal_ohlc is not None else None,
+        universe=universe if isinstance(universe, (str, Path)) else None,
+        random_seed=random_seed,
+        relevant_args=relevant_args,
+        dataset_identity=dataset_identity,
+    )
+    return result

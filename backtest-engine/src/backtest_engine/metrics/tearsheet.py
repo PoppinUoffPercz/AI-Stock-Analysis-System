@@ -16,12 +16,13 @@ Decisions:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from backtest_engine.experiment_index import ExperimentIndex
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
 from backtest_engine.strategy.persistence import persist_result
 
@@ -32,7 +33,6 @@ class ReportConfig:
     outputs_dir: Path
     write_quantstats: bool = True  # set False in tests to avoid network/matplotlib
     write_plotly: bool = True
-    extra_fields: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -57,7 +57,21 @@ def render_report(
     Returns:
       ReportResult with paths + the bias-audit panel + metrics dict.
     """
-    metrics = attach_metric_panel(result)
+    metrics = {
+        key: value if np.isfinite(value) else 0.0
+        for key, value in attach_metric_panel(result).items()
+    }
+    benchmark = result.metadata.get("benchmark", {})
+    if benchmark.get("status") == "available":
+        metrics.update(
+            {
+                "benchmark_total_return": float(benchmark["total_return"]),
+                "strategy_cost_addback_return": float(benchmark["strategy_cost_addback_return"]),
+                "strategy_gross_return": float(benchmark["strategy_gross_return"]),
+                "strategy_net_return": float(benchmark["strategy_net_return"]),
+                "relative_net_performance": float(benchmark["relative_net_performance"]),
+            }
+        )
     flags = bias_audit(metrics)
     result.metrics = metrics
 
@@ -107,6 +121,8 @@ def render_report(
 <h1>Backtest Report - {cfg.run_id}</h1>
 <h2>Metrics</h2>
 <pre>{json.dumps({k: float(v) if isinstance(v, (int, float, np.floating)) else str(v) for k, v in metrics.items()}, indent=2)}</pre>
+<h2>Benchmark</h2>
+<pre>{json.dumps(benchmark, indent=2)}</pre>
 <h2>Bias audit flags</h2>
 <pre>{json.dumps({k: str(v) for k, v in flags.items()}, indent=2)}</pre>
 {panels_html}
@@ -126,6 +142,20 @@ def render_report(
             indent=2,
         ),
         encoding="utf-8",
+    )
+
+    manifest = result.manifest
+    if manifest is None:
+        raise RuntimeError("persisted result did not receive a manifest")
+    ExperimentIndex(Path(cfg.outputs_dir) / "experiments.jsonl").append(
+        manifest,
+        artifacts={
+            "manifest": f"{cfg.run_id}/manifest.json",
+            "metrics": f"{cfg.run_id}/metrics.json",
+            "report": f"{cfg.run_id}/report.html",
+            "result": f"{cfg.run_id}/result.json",
+        },
+        benchmark=benchmark or None,
     )
 
     return ReportResult(
@@ -158,9 +188,8 @@ def _bias_flags_figure(flags: dict):
     return fig
 
 
-def make_report_config(*, run_id: str, outputs_dir: Path | str, **extra) -> ReportConfig:
+def make_report_config(*, run_id: str, outputs_dir: Path | str) -> ReportConfig:
     return ReportConfig(
         run_id=run_id,
         outputs_dir=Path(outputs_dir),
-        extra_fields=extra,
     )

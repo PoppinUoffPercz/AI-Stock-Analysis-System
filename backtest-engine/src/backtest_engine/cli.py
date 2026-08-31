@@ -26,6 +26,7 @@ import pandas as pd
 
 from backtest_engine import __version__
 from backtest_engine.config import resolve_settings
+from backtest_engine.data.ingest import ingest_symbol
 from backtest_engine.data.store import read_clean
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
 from backtest_engine.metrics.tearsheet import make_report_config, render_report
@@ -99,6 +100,20 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("settings", help="Print resolved settings as JSON")
     sub.add_parser("strats", help="List built-in strategies")
 
+    i = sub.add_parser("ingest", help="Ingest market data into the canonical clean store")
+    i.add_argument("--source", choices=("csv", "yfinance", "stooq"), default="csv")
+    i.add_argument("--input", type=Path, help="Local CSV input (required for --source csv)")
+    i.add_argument("--symbol", required=True)
+    i.add_argument("--start")
+    i.add_argument("--end")
+    i.add_argument("--data-root", type=Path)
+    i.add_argument("--destination", type=Path, help="Alias for --data-root")
+
+    c = sub.add_parser("compare", help="Compare explicit persisted run ids")
+    c.add_argument("--run-id", action="append", required=True)
+    c.add_argument("--outputs-root", type=Path)
+    c.add_argument("--json", action="store_true", dest="as_json")
+
     d = sub.add_parser("discover", help="Phase 1 - VectorBT discovery (single persisted-data run)")
     d.add_argument("--strategy", required=True, choices=sorted(REGISTRY))
     d.add_argument(
@@ -146,7 +161,12 @@ def _add_data_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--universe-root",
         type=Path,
-        help="Configured universe metadata root (default: data/universe)",
+        help="Universe metadata root recorded with the run; does not filter bars",
+    )
+    parser.add_argument(
+        "--universe-csv",
+        type=Path,
+        help="CSV whose point-in-time membership filters bars before strategy execution",
     )
     parser.add_argument(
         "--synthetic",
@@ -171,6 +191,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         for name, (_factory, defaults) in REGISTRY.items():
             print(f"{name:20} defaults={defaults}")
         return 0
+
+    if args.cmd == "ingest":
+        return _cmd_ingest(args)
+
+    if args.cmd == "compare":
+        return _cmd_compare(args)
 
     if args.cmd == "discover" or args.cmd == "validate":
         return _cmd_backtest(args)
@@ -212,30 +238,57 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        spec.universe_ref = str(universe_root)
         source_label = str(data_root / "clean")
+    if args.universe_csv is not None:
+        spec.universe_ref = str(args.universe_csv)
     engine = "backtrader" if args.cmd == "validate" else args.engine
     run_id = f"bte-{args.cmd}-{uuid.uuid4().hex[:8]}"
-    res = run_spec(spec, ohlc, engine=engine, run_id=run_id)
+    try:
+        res = run_spec(
+            spec,
+            ohlc,
+            engine=engine,
+            run_id=run_id,
+            universe=args.universe_csv,
+            random_seed=args.seed if args.synthetic else None,
+            relevant_args={
+                "command": args.cmd,
+                "symbol": args.symbol.upper(),
+                "start": args.start,
+                "end": args.end,
+                "synthetic": bool(args.synthetic),
+                "synthetic_days": args.days if args.synthetic else None,
+            },
+            dataset_identity={
+                "kind": "synthetic" if args.synthetic else "persisted_clean",
+                "symbol": args.symbol.upper(),
+            },
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     symbol = str(ohlc.attrs.get("symbol", args.symbol)).upper()
-    res.metadata = {
-        "symbols": [symbol],
-        "date_range": {
-            "start": pd.Timestamp(ohlc.index[0]).isoformat(),
-            "end": pd.Timestamp(ohlc.index[-1]).isoformat(),
-        },
-        "data_source": source_label,
-        "data_root": str(data_root),
-        "universe_root": str(universe_root),
-        "requested_start": args.start,
-        "requested_end": args.end,
-        "synthetic": bool(args.synthetic),
-        "execution": {
-            "engine": res.engine,
-            "cost_model": res.cost_model,
-            "capital": res.capital,
-        },
-    }
+    res.metadata.update(
+        {
+            "symbols": [symbol],
+            "date_range": {
+                "start": pd.Timestamp(res.equity.index[0]).isoformat(),
+                "end": pd.Timestamp(res.equity.index[-1]).isoformat(),
+            },
+            "data_source": source_label,
+            "data_root": str(data_root),
+            "universe_root": str(universe_root),
+            "universe_csv": str(args.universe_csv) if args.universe_csv is not None else None,
+            "requested_start": args.start,
+            "requested_end": args.end,
+            "synthetic": bool(args.synthetic),
+            "execution": {
+                "engine": res.engine,
+                "cost_model": res.cost_model,
+                "capital": res.capital,
+            },
+        }
+    )
     print(f"Run id: {res.run_id}")
     print(f"Engine: {res.engine}")
     print(f"Strategy: {res.strategy_name}")
@@ -321,34 +374,58 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        spec.universe_ref = str(universe_root)
         source_label = str(data_root / "clean")
+
+    if args.universe_csv is not None:
+        spec.universe_ref = str(args.universe_csv)
 
     run_id = f"bte-replay-{uuid.uuid4().hex[:8]}"
     try:
-        result = run_spec(spec, ohlc, engine="nautilus", run_id=run_id)
-    except (RuntimeError, ValueError) as exc:
+        result = run_spec(
+            spec,
+            ohlc,
+            engine="nautilus",
+            run_id=run_id,
+            universe=args.universe_csv,
+            random_seed=args.seed if args.synthetic else None,
+            relevant_args={
+                "command": args.cmd,
+                "symbol": args.symbol.upper(),
+                "start": args.start,
+                "end": args.end,
+                "synthetic": bool(args.synthetic),
+                "synthetic_days": args.days if args.synthetic else None,
+            },
+            dataset_identity={
+                "kind": "synthetic" if args.synthetic else "persisted_clean",
+                "symbol": args.symbol.upper(),
+            },
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     symbol = str(ohlc.attrs.get("symbol", args.symbol)).upper()
-    result.metadata = {
-        "symbols": [symbol],
-        "date_range": {
-            "start": pd.Timestamp(ohlc.index[0]).isoformat(),
-            "end": pd.Timestamp(ohlc.index[-1]).isoformat(),
-        },
-        "data_source": source_label,
-        "data_root": str(data_root),
-        "universe_root": str(universe_root),
-        "requested_start": args.start,
-        "requested_end": args.end,
-        "synthetic": bool(args.synthetic),
-        "execution": {
-            "engine": result.engine,
-            "cost_model": result.cost_model,
-            "capital": result.capital,
-        },
-    }
+    result.metadata.update(
+        {
+            "symbols": [symbol],
+            "date_range": {
+                "start": pd.Timestamp(result.equity.index[0]).isoformat(),
+                "end": pd.Timestamp(result.equity.index[-1]).isoformat(),
+            },
+            "data_source": source_label,
+            "data_root": str(data_root),
+            "universe_root": str(universe_root),
+            "universe_csv": str(args.universe_csv) if args.universe_csv is not None else None,
+            "requested_start": args.start,
+            "requested_end": args.end,
+            "synthetic": bool(args.synthetic),
+            "execution": {
+                "engine": result.engine,
+                "cost_model": result.cost_model,
+                "capital": result.capital,
+            },
+        }
+    )
     metrics = attach_metric_panel(result)
     report = render_report(
         result,
@@ -359,6 +436,87 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     print(f"Data: {symbol} ({source_label})")
     print(json.dumps({k: float(v) for k, v in metrics.items()}, indent=2))
     print(f"Report written to {report.html_path}")
+    return 0
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    settings = resolve_settings()
+    if args.data_root is not None and args.destination is not None:
+        print("error: pass only one of --data-root or --destination", file=sys.stderr)
+        return 1
+    data_root = args.destination or args.data_root or settings.data_dir
+    try:
+        rows, boundary = ingest_symbol(
+            args.symbol,
+            source=args.source,
+            start=args.start,
+            end=args.end,
+            clean_root=data_root / "clean",
+            universe_root=data_root / "universe",
+            cross_check=False,
+            input_path=args.input,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if rows == 0:
+        print(f"error: no rows found for {args.symbol.upper()}", file=sys.stderr)
+        return 1
+    print(f"Ingested {rows} rows for {args.symbol.upper()} into {data_root / 'clean'}")
+    if boundary is not None:
+        print(f"Boundary written to {boundary}")
+    return 0
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    outputs_root = args.outputs_root or resolve_settings().outputs_dir
+    rows = []
+    for run_id in args.run_id:
+        path = outputs_root / run_id / "result.json"
+        if not path.is_file():
+            print(f"Missing result artifact for run {run_id}: {path}", file=sys.stderr)
+            return 1
+        try:
+            result = load_result(path)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"Invalid result artifact for run {run_id}: {exc}", file=sys.stderr)
+            return 1
+        metrics = attach_metric_panel(result) | result.metrics
+        benchmark = result.metadata.get("benchmark", {})
+        period = result.metadata.get("date_range") or {
+            "start": result.equity.index[0].isoformat(),
+            "end": result.equity.index[-1].isoformat(),
+        }
+        net_return = float(metrics.get("strategy_net_return", metrics["total_return"]))
+        gross_return = float(
+            metrics.get(
+                "strategy_gross_return",
+                result.metadata.get("strategy_gross_return", net_return),
+            )
+        )
+        rows.append(
+            {
+                "run_id": result.run_id,
+                "strategy": result.strategy_name,
+                "params": result.params,
+                "engine": result.engine,
+                "period": f"{period['start']} to {period['end']}",
+                "total_return": float(metrics["total_return"]),
+                "gross_return": gross_return,
+                "net_return": net_return,
+                "benchmark": benchmark.get("total_return", "unavailable"),
+                "max_drawdown": float(metrics["max_drawdown"]),
+                "total_costs": float(result.metadata.get("total_execution_cost", 0.0)),
+                "trade_count": int(metrics.get("n_trades", result.n_trades)),
+            }
+        )
+    if args.as_json:
+        print(json.dumps(rows, indent=2, sort_keys=False))
+    else:
+        columns = list(rows[0])
+        print("\t".join(columns))
+        for row in rows:
+            print("\t".join(json.dumps(row[column], sort_keys=True) for column in columns))
     return 0
 
 

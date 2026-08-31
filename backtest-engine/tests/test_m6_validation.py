@@ -16,7 +16,7 @@ from backtest_engine.validation.monte_carlo import (
 )
 from backtest_engine.validation.permutation import EntryEvaluation, random_entry_permutation
 from backtest_engine.validation.stability import build_metric_surface, param_drift
-from backtest_engine.validation.walk_forward import rolling_windows
+from backtest_engine.validation.walk_forward import rolling_windows, walk_forward
 
 # --- helpers --------------------------------------------------------------
 
@@ -328,3 +328,159 @@ def test_rolling_windows_short_history_returns_empty():
     ohlc = pd.DataFrame({"close": 100 + np.arange(10)}, index=idx)
     is_w, oos_w = rolling_windows(ohlc, is_years=5, oos_years=1)
     assert is_w == [] and oos_w == []
+
+
+def test_walk_forward_uses_history_for_signals_but_executes_only_oos():
+    index = pd.date_range("2024-01-01", periods=8, tz="UTC")
+    ohlc = pd.DataFrame({"close": np.arange(8, dtype=float)}, index=index)
+    optimized_indexes: list[pd.Index] = []
+    oos_calls: list[tuple[pd.Index, pd.Index]] = []
+
+    def optimize(_spec, bars):
+        optimized_indexes.append(bars.index)
+        return {"period": 3}
+
+    def run_engine(_spec, bars, *, run_id, signal_ohlc=None, **_kwargs):
+        if run_id.startswith("wf-oos"):
+            oos_calls.append((bars.index, signal_ohlc.index))
+        return _backtest_result_mock(pd.Series(np.arange(1, len(bars) + 1), index=bars.index))
+
+    result = walk_forward(
+        StrategySpec(
+            name="warmup", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+        ),
+        ohlc,
+        run_engine=run_engine,
+        optimize=optimize,
+        is_windows=[(index[0], index[3])],
+        oos_windows=[(index[3], index[6])],
+    )
+
+    assert optimized_indexes[0].equals(index[:3])
+    assert oos_calls[0][0].equals(index[3:6])
+    assert oos_calls[0][1].equals(index[:6])
+    assert result.oos_equity.index.equals(index[3:6])
+
+
+def test_walk_forward_accepts_adjacent_oos_windows_and_sorts_output():
+    index = pd.date_range("2024-01-01", periods=8, tz="UTC")
+    ohlc = pd.DataFrame({"close": np.arange(8, dtype=float)}, index=index)
+
+    def run_engine(_spec, bars, **_kwargs):
+        equity = pd.Series(np.arange(1, len(bars) + 1), index=bars.index[::-1])
+        return _backtest_result_mock(equity)
+
+    result = walk_forward(
+        StrategySpec(
+            name="adjacent", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+        ),
+        ohlc,
+        run_engine=run_engine,
+        optimize=lambda _spec, _bars: {},
+        is_windows=[(index[1], index[4]), (index[0], index[2])],
+        oos_windows=[(index[4], index[6]), (index[2], index[4])],
+    )
+
+    assert result.oos_equity.index.equals(index[2:6])
+    assert result.oos_equity.index.is_unique
+    assert result.oos_intervals == [(index[2], index[4]), (index[4], index[6])]
+
+
+def test_walk_forward_rejects_overlapping_oos_windows():
+    index = pd.date_range("2024-01-01", periods=8, tz="UTC")
+    ohlc = pd.DataFrame({"close": np.arange(8, dtype=float)}, index=index)
+
+    with pytest.raises(ValueError, match="OOS windows must not overlap"):
+        walk_forward(
+            StrategySpec(
+                name="overlap", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+            ),
+            ohlc,
+            run_engine=lambda *_args, **_kwargs: None,
+            optimize=lambda _spec, _bars: {},
+            is_windows=[(index[0], index[2]), (index[1], index[3])],
+            oos_windows=[(index[2], index[5]), (index[4], index[6])],
+        )
+
+
+@pytest.mark.parametrize(
+    ("is_window", "message"),
+    [
+        ((2, 2), "IS windows must be non-empty"),
+        ((0, 4), "contaminates paired OOS window"),
+    ],
+)
+def test_walk_forward_rejects_invalid_or_contaminated_is_window(is_window, message):
+    index = pd.date_range("2024-01-01", periods=6, tz="UTC")
+    ohlc = pd.DataFrame({"close": np.arange(6, dtype=float)}, index=index)
+
+    with pytest.raises(ValueError, match=message):
+        walk_forward(
+            StrategySpec(
+                name="contaminated",
+                signal_factory=lambda bars, params: pd.DataFrame(index=bars.index),
+            ),
+            ohlc,
+            run_engine=lambda *_args, **_kwargs: None,
+            optimize=lambda _spec, _bars: {},
+            is_windows=[(index[is_window[0]], index[is_window[1]])],
+            oos_windows=[(index[3], index[5])],
+        )
+
+
+def test_walk_forward_calls_run_spec_directly_with_warmup_history():
+    from backtest_engine.pipeline.discovery import run_spec
+
+    index = pd.date_range("2024-01-01", periods=8, tz="UTC")
+    close = pd.Series(np.arange(8, dtype=float) + 100.0, index=index)
+    ohlc = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+            "volume": 1_000_000.0,
+        },
+        index=index,
+    )
+
+    def signals(history, params):
+        warmed = history["close"].rolling(params["period"]).mean().notna()
+        return pd.DataFrame({"entry": warmed, "exit": False}, index=history.index)
+
+    result = walk_forward(
+        StrategySpec(name="warmup", signal_factory=signals, params={"period": 3}),
+        ohlc,
+        run_engine=run_spec,
+        optimize=lambda _spec, _bars: {"period": 3},
+        is_windows=[(index[0], index[3])],
+        oos_windows=[(index[3], index[7])],
+    )
+
+    assert result.oos_equity.index.equals(index[3:7])
+    assert not result.oos_equity.empty
+
+
+def test_walk_forward_rejects_duplicate_stitched_dates():
+    index = pd.date_range("2024-01-01", periods=6, tz="UTC")
+    ohlc = pd.DataFrame({"close": np.arange(6, dtype=float)}, index=index)
+
+    def run_engine(_spec, bars, *, run_id, **_kwargs):
+        equity_index = (
+            bars.index if run_id.startswith("wf-is") else bars.index.insert(1, bars.index[0])
+        )
+        return _backtest_result_mock(
+            pd.Series(np.arange(1, len(equity_index) + 1), index=equity_index)
+        )
+
+    with pytest.raises(ValueError, match="duplicate OOS equity dates"):
+        walk_forward(
+            StrategySpec(
+                name="duplicate", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+            ),
+            ohlc,
+            run_engine=run_engine,
+            optimize=lambda _spec, _bars: {},
+            is_windows=[(index[0], index[3])],
+            oos_windows=[(index[3], index[-1] + pd.Timedelta(days=1))],
+        )

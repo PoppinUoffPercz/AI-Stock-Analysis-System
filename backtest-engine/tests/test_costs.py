@@ -21,7 +21,12 @@ from backtest_engine.execution.costs import (
 
 
 def test_preset_keys_match_plan():
-    assert set(PRESETS.keys()) == {"us_equity_pershare", "us_equity_flat", "zero"}
+    assert set(PRESETS.keys()) == {
+        "us_equity_pershare",
+        "us_equity_flat",
+        "us_equity_proportional",
+        "zero",
+    }
 
 
 def test_zero_preset():
@@ -84,7 +89,7 @@ def test_slippage_handles_zero_volume():
 
 
 def test_build_cost_funcs_returns_nonnegative():
-    fees, slip = build_cost_funcs("us_equity_pershare")
+    fees, slip = build_cost_funcs("us_equity_proportional")
     assert fees >= 0
     assert slip >= 0
 
@@ -98,6 +103,12 @@ def test_build_cost_funcs_zero_preset():
 def test_build_cost_funcs_rejects_unknown():
     with pytest.raises(ValueError):
         build_cost_funcs("rolex")
+
+
+@pytest.mark.parametrize("name", ["us_equity_flat", "us_equity_pershare"])
+def test_build_cost_funcs_rejects_unrepresentable_presets(name):
+    with pytest.raises(ValueError, match="cannot represent.*exactly"):
+        build_cost_funcs(name)
 
 
 # --- Hypothesis property tests --------------------------------------------

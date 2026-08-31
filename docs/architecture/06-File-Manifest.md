@@ -94,8 +94,8 @@ Every file in `./scion-omaha-bots\` and what it does.
 
 | File | Purpose |
 | :--- | :--- |
-| `burry_agent_profile.md` | Michael Burry persona: swing trading rules, "ick" philosophy, conviction sizing. |
-| `buffett_agent_profile.md` | Warren Buffett persona: quality compounding, circle of competence, moat focus. |
+| `frameworks/agents/Scion-Bot Agent Profile.md` | Michael Burry persona: swing trading rules, "ick" philosophy, conviction sizing. |
+| `frameworks/agents/Omaha-Bot Agent Profile.md` | Warren Buffett persona: quality compounding, circle of competence, moat focus. |
 
 ## Support Files
 

@@ -233,9 +233,10 @@ def test_vbt_adapter_fills_signals_at_next_open_and_skips_final_bar():
     trade = result.trades[0]
     assert trade.timestamp == idx[1]
     assert trade.fill_price == pytest.approx(250.0)
+    assert trade.quantity == pytest.approx(3.0)
     assert trade.exit_timestamp == idx[3]
     assert trade.exit_price == pytest.approx(499.0)
-    assert result.equity.tolist() == pytest.approx([1_000.0, 80.0, 120.0, 1_996.0])
+    assert result.equity.tolist() == pytest.approx([1_000.0, 310.0, 340.0, 1_747.0])
 
 
 @pytest.mark.smoke
@@ -253,8 +254,11 @@ def test_vbt_adapter_sweep_returns_one_result_per_combo():
         universe_ref="SYNTH",
     )
     assert len(results) == 6
-    # Params dict on each result
-    assert all("fast" in r.params and "slow" in r.params for r in results)
-    # No duplicate param combinations (fast=fast in (10,10) etc not allowed since fast<slow)
-    combos = {(r.params["fast"], r.params["slow"]) for r in results}
-    assert len(combos) == 6
+    assert [(r.params["fast"], r.params["slow"]) for r in results] == [
+        (5, 30),
+        (5, 50),
+        (10, 30),
+        (10, 50),
+        (20, 30),
+        (20, 50),
+    ]

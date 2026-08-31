@@ -23,7 +23,8 @@ import backtrader as bt
 import pandas as pd
 
 from backtest_engine.execution.costs import get_preset
-from backtest_engine.strategy.result import BacktestResult, TradeRecord
+from backtest_engine.strategy.result import BacktestResult, TradeRecord, validate_backtest_result
+from backtest_engine.strategy.validation import validate_signal_frame
 
 
 class _SignalDrivenStrategy(bt.Strategy):
@@ -35,7 +36,12 @@ class _SignalDrivenStrategy(bt.Strategy):
     Backtrader-resolved timestamps). If `exit` is True and we're long, flatten.
     """
 
-    params = (("signals", None), ("cost_model_name", "zero"), ("trade_log", None))
+    params = (
+        ("signals", None),
+        ("cost_model_name", "zero"),
+        ("trade_log", None),
+        ("rejections", None),
+    )
 
     def __init__(self) -> None:
         self._entry = self.params.signals.get("entry")  # type: ignore[attr-defined]
@@ -45,17 +51,20 @@ class _SignalDrivenStrategy(bt.Strategy):
         # holds its own `self._trades` (DefaultDict keyed by data) set up by the
         # metaclass. Shadowing it crashes inside BT's notify path.
         self._trade_log: list = self.params.trade_log  # type: ignore[attr-defined]
+        self._rejections: list = self.params.rejections  # type: ignore[attr-defined]
         self._pending_order_ref: int | None = None
+        self._pending_action: tuple[str, str] | None = None
+        self._open_fill: TradeRecord | None = None
 
     def next(self) -> None:
-        if self._pending_order_ref is not None:
+        if self._pending_order_ref is not None or self._pending_action is not None:
             return
 
         # Backtrader feeds us naive datetime objects; the entry/exit series
         # passed in via params were stripped of tz upstream (UTC naive). The
-        # lookup day-normalizes both sides.
+        # lookup preserves exact timestamps on both sides.
         bt_dt = self.datas[0].datetime.datetime(0)  # already datetime (naive)
-        ts_naive = pd.Timestamp(bt_dt).normalize()
+        ts_naive = pd.Timestamp(bt_dt)
         try:
             entry = bool(self._entry.loc[ts_naive])
         except KeyError:
@@ -66,17 +75,42 @@ class _SignalDrivenStrategy(bt.Strategy):
             exit_ = False
 
         pos = self.getposition(self.datas[0])
-        price = float(self.datas[0].close[0])
         sym = self.datas[0]._name or "UNKNOWN"
 
         if entry and pos.size == 0:
-            size = int(self.broker.getvalue() / max(price, 1e-6) * 0.99)
-            if size > 0:
-                order = self.buy(data=self.datas[0], size=size)
-                self._track_order(order, sym, side="LONG")
+            self._pending_action = ("LONG", sym)
         elif exit_ and pos.size > 0:
-            order = self.close(data=self.datas[0])
-            self._track_order(order, sym, side="EXIT")
+            self._pending_action = ("EXIT", sym)
+
+    def next_open(self) -> None:
+        """Execute the prior close's decision using the current opening price."""
+        if self._pending_action is None or self._pending_order_ref is not None:
+            return
+        side, sym = self._pending_action
+        self._pending_action = None
+        if side == "LONG":
+            price = float(self.datas[0].open[0])
+            cash = float(self.broker.getcash())
+            budget = cash * 0.99
+            volume = float(self.datas[0].volume[0])
+            high = int(budget / max(price, 1e-6))
+            low = 0
+            while low < high:
+                size = (low + high + 1) // 2
+                cost = self._cm.commission(size, price) + self._cm.slippage_cost(
+                    size, price, volume
+                )
+                if size * price + cost <= budget:
+                    low = size
+                else:
+                    high = size - 1
+            size = low
+            if size <= 0:
+                self._rejections.append({"side": side, "reason": "insufficient_cash"})
+                return
+            self._track_order(self.buy(data=self.datas[0], size=size), sym, side=side)
+        else:
+            self._track_order(self.close(data=self.datas[0]), sym, side=side)
 
     def _track_order(self, order, sym: str, side: str) -> None:
         if order is None:
@@ -105,17 +139,33 @@ class _SignalDrivenStrategy(bt.Strategy):
             # accounting and the trade log use the same executed-fill inputs.
             self.broker.cash -= commission + slippage_cost
             self.broker._get_value()  # refresh cached equity before analyzers run
-            self._trade_log.append(
-                TradeRecord(
-                    timestamp=timestamp,
-                    symbol=getattr(order.info, "symbol", "UNKNOWN"),
-                    side=getattr(order.info, "side", "LONG"),
-                    quantity=quantity,
-                    fill_price=fill_price,
-                    commission=commission,
-                    slippage_cost=slippage_cost,
-                )
+            fill = TradeRecord(
+                timestamp=timestamp,
+                symbol=getattr(order.info, "symbol", "UNKNOWN"),
+                side=getattr(order.info, "side", "LONG"),
+                quantity=quantity,
+                fill_price=fill_price,
+                commission=commission,
+                slippage_cost=slippage_cost,
             )
+            if fill.side == "LONG":
+                self._open_fill = fill
+            elif fill.side == "EXIT" and self._open_fill is not None:
+                entry = self._open_fill
+                self._trade_log.append(
+                    TradeRecord(
+                        timestamp=entry.timestamp,
+                        symbol=entry.symbol,
+                        side="LONG",
+                        quantity=min(entry.quantity, fill.quantity),
+                        fill_price=entry.fill_price,
+                        commission=entry.commission + fill.commission,
+                        slippage_cost=entry.slippage_cost + fill.slippage_cost,
+                        exit_timestamp=fill.timestamp,
+                        exit_price=fill.fill_price,
+                    )
+                )
+                self._open_fill = None
             self._pending_order_ref = None
         elif order.status in (
             order.Canceled,
@@ -123,6 +173,14 @@ class _SignalDrivenStrategy(bt.Strategy):
             order.Rejected,
             order.Expired,
         ):
+            rejections = getattr(self, "_rejections", None)
+            if rejections is not None:
+                rejections.append(
+                    {
+                        "side": getattr(order.info, "side", "UNKNOWN"),
+                        "reason": order.getstatusname(),
+                    }
+                )
             self._pending_order_ref = None
 
 
@@ -139,12 +197,12 @@ class _EquityAnalyzer(bt.Analyzer):
         ts = pd.Timestamp(bt_dt)
         eq = float(self.strategy.broker.getvalue())
         ts = ts.tz_convert("UTC") if ts.tzinfo else ts.tz_localize("UTC")
-        self._equity.append((ts.normalize(), eq))
+        self._equity.append((ts, eq))
         if self._prev_equity is not None and self._prev_equity > 0:
             r = eq / self._prev_equity - 1.0
         else:
             r = 0.0
-        self._returns.append((ts.normalize(), r))
+        self._returns.append((ts, r))
         self._prev_equity = eq
 
     def get_analysis(self) -> dict[str, pd.Series]:
@@ -174,12 +232,12 @@ class BTAdapter:
         run_id: str | None = None,
     ) -> BacktestResult:
         """Execute one backtest through Cerebro and emit a canonical BacktestResult."""
+        signals = validate_signal_frame(signals, ohlc)
         # Strip tz from signals index (Backtrader prefers naive datetimes).
         sig_naive = signals.copy()
         sig_index = pd.DatetimeIndex(sig_naive.index)
         if sig_index.tz is not None:
             sig_naive.index = sig_index.tz_convert("UTC").tz_localize(None)
-        sig_naive.index = pd.DatetimeIndex(sig_naive.index).normalize()
 
         ohlc_naive = ohlc.copy()
         ohlc_index = pd.DatetimeIndex(ohlc_naive.index)
@@ -197,15 +255,17 @@ class BTAdapter:
         )
         feed._name = ohlc.attrs.get("symbol", "UNKNOWN")
 
-        cerebro = bt.Cerebro(stdstats=False)
+        cerebro = bt.Cerebro(stdstats=False, cheat_on_open=True)
         cerebro.broker.setcash(capital)
         cerebro.broker.set_coc(
             False
         )  # no cheat-on-close: fill at next bar open (look-ahead defense)
+        cerebro.broker.set_coo(True)
         cerebro.adddata(feed)
 
         # Build the strategy class with frozen args (Backtrader uses its params system).
         trade_log: list[TradeRecord] = []
+        rejections: list[dict[str, str]] = []
 
         # backtrader.Strategy subclass is instantiated by Cerebro. We deliver
         # state via .params (the dataclass on the class), so we wrap closure vars.
@@ -214,6 +274,7 @@ class BTAdapter:
                 ("signals", {"entry": sig_naive["entry"], "exit": sig_naive.get("exit")}),
                 ("cost_model_name", cost_model),
                 ("trade_log", trade_log),
+                ("rejections", rejections),
             )
 
         cerebro.addstrategy(_Bound)
@@ -239,15 +300,36 @@ class BTAdapter:
         if not returns.empty and returns.index.tz is None:
             returns.index = returns.index.tz_localize("UTC")
 
-        return BacktestResult(
-            run_id=run_id or f"bt-{uuid.uuid4().hex[:8]}",
-            strategy_name=strategy_name,
-            engine=self.name,
-            params=dict(params),
-            capital=capital,
-            cost_model=cost_model,
-            universe_ref=universe_ref,
-            equity=equity,
-            returns=returns,
-            trades=trade_log,
+        open_fill = strat._open_fill
+        if open_fill is not None:
+            trade_log.append(open_fill)
+
+        total_commission = sum(trade.commission for trade in trade_log)
+        total_slippage = sum(trade.slippage_cost for trade in trade_log)
+        total_execution_cost = total_commission + total_slippage
+        net_final_equity = float(equity.iloc[-1]) if len(equity) else 0.0
+
+        return validate_backtest_result(
+            BacktestResult(
+                run_id=run_id or f"bt-{uuid.uuid4().hex[:8]}",
+                strategy_name=strategy_name,
+                engine=self.name,
+                params=dict(params),
+                capital=capital,
+                cost_model=cost_model,
+                universe_ref=universe_ref,
+                equity=equity,
+                returns=returns,
+                trades=trade_log,
+                raw_metrics={"rejected_orders": len(rejections)},
+                metadata={
+                    "cost_fidelity": "exact",
+                    "cash_allocation_fraction": 0.99,
+                    "total_commission": total_commission,
+                    "total_slippage": total_slippage,
+                    "total_execution_cost": total_execution_cost,
+                    "cost_addback_final_equity": net_final_equity + total_execution_cost,
+                    "net_final_equity": net_final_equity,
+                },
+            )
         )

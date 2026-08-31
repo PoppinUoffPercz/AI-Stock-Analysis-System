@@ -8,6 +8,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .hypothesis/
+.superpowers/
+.pytest-tmp-*/
+.pytest-task*/
 .coverage
 htmlcov/
 .ipynb_checkpoints/

@@ -34,10 +34,16 @@ class Universe:
         if "symbol" not in df.columns:
             raise ValueError("universe CSV must contain 'symbol' column")
         df = df.copy()
-        df["symbol"] = df["symbol"].astype(str).str.upper()
+        if df["symbol"].isna().any() or df["symbol"].astype(str).str.strip().eq("").any():
+            raise ValueError("universe CSV contains an empty symbol")
+        df["symbol"] = df["symbol"].astype(str).str.strip().str.upper()
         for c in ("list_date", "delist_date"):
             values = df[c] if c in df.columns else pd.Series(pd.NaT, index=df.index)
-            df[c] = pd.to_datetime(values, utc=True, errors="coerce")
+            parsed = pd.to_datetime(values, utc=True, errors="coerce")
+            invalid = values.notna() & values.astype(str).str.strip().ne("") & parsed.isna()
+            if invalid.any():
+                raise ValueError(f"universe CSV contains invalid {c}")
+            df[c] = parsed
         if "delist_reason" in df.columns:
             df["delist_reason"] = df["delist_reason"].astype(str)
         else:
@@ -82,12 +88,41 @@ class Universe:
         if panel.empty:
             return panel
         out = panel.copy()
-        out[symbol_col] = out[symbol_col].astype(str).str.upper()
-        out[date_col] = pd.to_datetime(out[date_col], utc=True)
-        keep_mask = []
-        for sym, ts in zip(out[symbol_col], out[date_col], strict=False):
-            keep_mask.append(self._is_member(sym, ts))
-        return out.loc[keep_mask].reset_index(drop=True)
+        if symbol_col in out.columns and date_col in out.columns:
+            symbols = out[symbol_col].astype(str).str.upper()
+            timestamps = pd.to_datetime(out[date_col], utc=True)
+            out[symbol_col] = symbols
+            out[date_col] = timestamps
+        elif symbol_col not in out.columns and date_col not in out.columns:
+            symbol = out.attrs.get("symbol")
+            if symbol is None:
+                raise ValueError(
+                    f"panel must contain {symbol_col!r}/{date_col!r} columns or attrs['symbol'] "
+                    "with a datetime index"
+                )
+            symbols = pd.Series(str(symbol).upper(), index=out.index)
+            timestamps = pd.Series(pd.to_datetime(out.index, utc=True), index=out.index)
+        else:
+            raise ValueError(f"panel must contain both {symbol_col!r} and {date_col!r} columns")
+
+        rows = pd.DataFrame(
+            {
+                "_row": range(len(out)),
+                "symbol": symbols.to_numpy(),
+                "timestamp": timestamps.to_numpy(),
+            }
+        )
+        joined = rows.merge(
+            self._df[["symbol", "list_date", "delist_date"]].assign(_known=True),
+            on="symbol",
+            how="left",
+            sort=False,
+        )
+        active = joined["_known"].fillna(False).astype(bool)
+        active &= joined["list_date"].isna() | (joined["list_date"] <= joined["timestamp"])
+        active &= joined["delist_date"].isna() | (joined["delist_date"] > joined["timestamp"])
+        keep = active.groupby(joined["_row"], sort=False).any().reindex(range(len(out)), fill_value=False)
+        return out.iloc[keep.to_numpy()]
 
 
 def write_spx_sample(universe_dir: Path, tickers: list[str]) -> Path:

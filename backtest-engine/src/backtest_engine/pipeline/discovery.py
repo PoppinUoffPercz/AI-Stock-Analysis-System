@@ -6,10 +6,12 @@ the BacktestResult. Used by both the CLI (M8) and by validation layer (M6).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from backtest_engine.data.universe import Universe
 from backtest_engine.strategy.adapters.bt_adapter import BTAdapter
 from backtest_engine.strategy.adapters.vbt_adapter import VBTAdapter
 from backtest_engine.strategy.base import EngineAdapter
@@ -41,8 +43,14 @@ def run_spec(
     capital: float | None = None,
     params: dict[str, Any] | None = None,
     run_id: str | None = None,
+    universe: Universe | str | Path | None = None,
 ) -> BacktestResult:
-    """Execute `spec` through `engine`. Adapter maps spec -> result."""
+    """Execute `spec` through `engine`, optionally enforcing point-in-time membership."""
+    if universe is not None:
+        active_universe = universe if isinstance(universe, Universe) else Universe.from_csv(universe)
+        ohlc = active_universe.filter_panel(ohlc)
+        if ohlc.empty:
+            raise ValueError("universe excludes every input bar")
     adapter = get_adapter(engine)
     use_cost = cost_model or spec.cost_model
     use_cap = capital if capital is not None else spec.capital

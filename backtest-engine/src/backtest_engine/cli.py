@@ -146,7 +146,12 @@ def _add_data_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--universe-root",
         type=Path,
-        help="Configured universe metadata root (default: data/universe)",
+        help="Universe metadata root recorded with the run; does not filter bars",
+    )
+    parser.add_argument(
+        "--universe-csv",
+        type=Path,
+        help="CSV whose point-in-time membership filters bars before strategy execution",
     )
     parser.add_argument(
         "--synthetic",
@@ -212,11 +217,18 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        spec.universe_ref = str(universe_root)
         source_label = str(data_root / "clean")
+    if args.universe_csv is not None:
+        spec.universe_ref = str(args.universe_csv)
     engine = "backtrader" if args.cmd == "validate" else args.engine
     run_id = f"bte-{args.cmd}-{uuid.uuid4().hex[:8]}"
-    res = run_spec(spec, ohlc, engine=engine, run_id=run_id)
+    try:
+        res = run_spec(
+            spec, ohlc, engine=engine, run_id=run_id, universe=args.universe_csv
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     symbol = str(ohlc.attrs.get("symbol", args.symbol)).upper()
     res.metadata = {
         "symbols": [symbol],
@@ -227,6 +239,7 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
         "data_source": source_label,
         "data_root": str(data_root),
         "universe_root": str(universe_root),
+        "universe_csv": str(args.universe_csv) if args.universe_csv is not None else None,
         "requested_start": args.start,
         "requested_end": args.end,
         "synthetic": bool(args.synthetic),
@@ -321,13 +334,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        spec.universe_ref = str(universe_root)
         source_label = str(data_root / "clean")
+
+    if args.universe_csv is not None:
+        spec.universe_ref = str(args.universe_csv)
 
     run_id = f"bte-replay-{uuid.uuid4().hex[:8]}"
     try:
-        result = run_spec(spec, ohlc, engine="nautilus", run_id=run_id)
-    except (RuntimeError, ValueError) as exc:
+        result = run_spec(
+            spec, ohlc, engine="nautilus", run_id=run_id, universe=args.universe_csv
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     symbol = str(ohlc.attrs.get("symbol", args.symbol)).upper()
@@ -340,6 +357,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         "data_source": source_label,
         "data_root": str(data_root),
         "universe_root": str(universe_root),
+        "universe_csv": str(args.universe_csv) if args.universe_csv is not None else None,
         "requested_start": args.start,
         "requested_end": args.end,
         "synthetic": bool(args.synthetic),

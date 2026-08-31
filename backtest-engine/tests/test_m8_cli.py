@@ -50,8 +50,42 @@ def test_cli_backtest_help_documents_real_data_options(capsys):
 
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    for option in ("--symbol", "--start", "--end", "--data-root", "--universe-root", "--synthetic"):
+    for option in (
+        "--symbol",
+        "--start",
+        "--end",
+        "--data-root",
+        "--universe-root",
+        "--universe-csv",
+        "--synthetic",
+    ):
         assert option in out
+
+
+def test_cli_passes_explicit_universe_csv_to_shared_run_spec(tmp_path: Path, monkeypatch):
+    universe_csv = tmp_path / "universe.csv"
+    universe_csv.write_text("symbol,list_date,delist_date\nSPY,2018-01-03,\n")
+    captured = {}
+
+    def fake_run_spec(*args, **kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop after dispatch")
+
+    monkeypatch.setattr(cli, "run_spec", fake_run_spec)
+
+    with pytest.raises(RuntimeError, match="stop after dispatch"):
+        cli.main(
+            [
+                "discover",
+                "--strategy",
+                "sma_cross",
+                "--synthetic",
+                "--universe-csv",
+                str(universe_csv),
+            ]
+        )
+
+    assert captured["universe"] == universe_csv
 
 
 @pytest.mark.smoke

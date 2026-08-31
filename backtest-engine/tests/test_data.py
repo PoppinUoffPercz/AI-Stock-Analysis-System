@@ -454,3 +454,68 @@ def test_universe_filter_panel_drops_post_delist_rows():
     assert set(out[out["symbol"] == "BBB"]["timestamp"].astype(str)) == {
         "2020-01-01 00:00:00+00:00"
     }
+
+
+def test_universe_filter_panel_is_vectorized_equivalent_and_preserves_order_and_index():
+    universe = Universe(
+        pd.DataFrame(
+            [
+                {"symbol": "AAA", "list_date": "2020-01-02", "delist_date": ""},
+                {"symbol": "BBB", "list_date": "", "delist_date": "2020-01-03"},
+            ]
+        )
+    )
+    panel = pd.DataFrame(
+        [
+            {"symbol": "bbb", "timestamp": "2020-01-02", "close": 20},
+            {"symbol": "AAA", "timestamp": "2020-01-01", "close": 10},
+            {"symbol": "AAA", "timestamp": "2020-01-03", "close": 11},
+            {"symbol": "BBB", "timestamp": "2020-01-03", "close": 21},
+        ],
+        index=[8, 3, 5, 1],
+    )
+
+    actual = universe.filter_panel(panel)
+
+    assert actual.index.tolist() == [8, 5]
+    assert actual["symbol"].tolist() == ["BBB", "AAA"]
+    assert actual["close"].tolist() == [20, 11]
+
+
+def test_universe_filter_panel_supports_single_symbol_indexed_ohlc():
+    universe = Universe(
+        pd.DataFrame(
+            [{"symbol": "AAA", "list_date": "2020-01-02", "delist_date": "2020-01-05"}]
+        )
+    )
+    index = pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-04", "2020-01-05"])
+    ohlc = pd.DataFrame({"close": [1.0, 2.0, 3.0, 4.0]}, index=index)
+    ohlc.index.name = "timestamp"
+    ohlc.attrs["symbol"] = "aaa"
+
+    actual = universe.filter_panel(ohlc)
+
+    assert actual.index.equals(pd.DatetimeIndex(["2020-01-02", "2020-01-04"]))
+    assert actual.attrs["symbol"] == "aaa"
+
+
+def test_universe_rejects_malformed_dates(tmp_path):
+    path = tmp_path / "bad.csv"
+    path.write_text("symbol,list_date,delist_date\nAAA,not-a-date,\n")
+
+    with pytest.raises(ValueError, match="invalid list_date"):
+        Universe.from_csv(path)
+
+
+def test_universe_filter_distinguishes_unbounded_membership_from_unknown_symbol():
+    universe = Universe(pd.DataFrame([{"symbol": "AAA"}]))
+    panel = pd.DataFrame(
+        [
+            {"symbol": "AAA", "timestamp": "2020-01-01"},
+            {"symbol": "ZZZ", "timestamp": "2020-01-01"},
+        ]
+    )
+
+    actual = universe.filter_panel(panel)
+
+    assert actual["symbol"].tolist() == ["AAA"]

@@ -12,6 +12,7 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 
+from backtest_engine.reproducibility import RunManifest, fallback_manifest
 from backtest_engine.strategy.result import BacktestResult, TradeRecord, validate_backtest_result
 
 RESULT_SCHEMA_VERSION = 1
@@ -28,8 +29,11 @@ def persist_result(
     persisted_result = replace(result, metrics=metrics) if metrics is not None else result
     validate_backtest_result(persisted_result)
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / "result.json"
+    try:
+        manifest = result.manifest or fallback_manifest(result)
+    except ValueError as exc:
+        raise ValueError("backtest result contains a non-finite JSON value") from exc
+    _validate_manifest_result(manifest, result)
     payload = {
         "schema_version": RESULT_SCHEMA_VERSION,
         "run_id": result.run_id,
@@ -46,19 +50,57 @@ def persist_result(
         "metrics": persisted_result.metrics,
         "metadata": result.metadata,
     }
-    fd, temp_name = tempfile.mkstemp(prefix=".result.", suffix=".tmp", dir=output_dir)
+    try:
+        encoded = json.dumps(payload, indent=2, default=_json_default, allow_nan=False)
+    except ValueError as exc:
+        raise ValueError("backtest result contains a non-finite JSON value") from exc
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "result.json"
+    manifest_path = output_dir / "manifest.json"
+    if manifest_path.exists():
+        persisted_manifest = RunManifest.load(manifest_path)
+        if persisted_manifest.identity_hash != manifest.identity_hash:
+            raise FileExistsError(
+                f"immutable manifest already exists with different identity: {manifest_path}"
+            )
+        manifest = persisted_manifest
+    else:
+        manifest = _write_manifest_once(manifest_path, manifest)
+    result.manifest = manifest
+    persisted_result.manifest = manifest
+    _atomic_write(path, encoded, prefix=".result.")
+    return path
+
+
+def _atomic_write(path: Path, encoded: str, *, prefix: str) -> None:
+    fd, temp_name = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=path.parent)
     os.close(fd)
     temp = Path(temp_name)
     try:
-        try:
-            encoded = json.dumps(payload, indent=2, default=_json_default, allow_nan=False)
-        except ValueError as exc:
-            raise ValueError("backtest result contains a non-finite JSON value") from exc
         temp.write_text(encoded, encoding="utf-8")
         os.replace(temp, path)
     finally:
         temp.unlink(missing_ok=True)
-    return path
+
+
+def _write_manifest_once(path: Path, manifest: RunManifest) -> RunManifest:
+    fd, temp_name = tempfile.mkstemp(prefix=".manifest.", suffix=".tmp", dir=path.parent)
+    os.close(fd)
+    temp = Path(temp_name)
+    try:
+        temp.write_text(manifest.to_json(), encoding="utf-8")
+        try:
+            os.link(temp, path)
+            return manifest
+        except FileExistsError:
+            persisted = RunManifest.load(path)
+            if persisted.identity_hash != manifest.identity_hash:
+                raise FileExistsError(
+                    f"immutable manifest already exists with different identity: {path}"
+                ) from None
+            return persisted
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def load_result(path: Path) -> BacktestResult:
@@ -101,12 +143,43 @@ def load_result(path: Path) -> BacktestResult:
             raw_metrics=_mapping(payload.get("raw_metrics", {}), "raw_metrics"),
             metrics=_mapping(payload.get("metrics", {}), "metrics"),
             metadata=_mapping(payload.get("metadata", {}), "metadata"),
+            manifest=(
+                RunManifest.load(Path(path).with_name("manifest.json"))
+                if Path(path).with_name("manifest.json").exists()
+                else None
+            ),
         )
     except ValueError:
         raise
     except (KeyError, TypeError, OverflowError) as exc:
         raise ValueError(f"malformed backtest result: {exc}") from exc
-    return validate_backtest_result(result)
+    validate_backtest_result(result)
+    if result.manifest is not None:
+        _validate_manifest_result(result.manifest, result)
+    return result
+
+
+def _validate_manifest_result(manifest: RunManifest, result: BacktestResult) -> None:
+    if manifest.run_id != result.run_id:
+        raise ValueError(
+            f"manifest run_id {manifest.run_id!r} does not match result run_id {result.run_id!r}"
+        )
+    expected = {
+        "engine": result.engine,
+        "params": result.params,
+        "capital": result.capital,
+    }
+    actual = {
+        "engine": manifest.stable.get("engine"),
+        "params": dict(manifest.stable.get("params", {})),
+        "capital": manifest.stable.get("capital"),
+    }
+    if actual != expected:
+        raise ValueError("manifest stable fields do not match persisted result")
+    strategy = manifest.stable.get("strategy", {})
+    cost = manifest.stable.get("cost", {})
+    if strategy.get("name") != result.strategy_name or cost.get("name") != result.cost_model:
+        raise ValueError("manifest stable fields do not match persisted result")
 
 
 def _series_to_payload(series: pd.Series) -> dict[str, Any]:

@@ -184,7 +184,16 @@ def test_cli_run_then_report_persists_artifacts(tmp_path: Path, capsys, monkeypa
 
     assert (run_dir / "metrics.json").exists()
     assert (run_dir / "result.json").exists()
+    assert (run_dir / "manifest.json").exists()
     assert (run_dir / "report.html").exists()
+    manifest = json.loads((run_dir / "manifest.json").read_text())
+    assert manifest["stable"]["random_seed"] == 1
+    assert manifest["stable"]["data"]["content_sha256"]
+    assert str(tmp_path) not in json.dumps(manifest["stable"])
+    assert any(
+        json.loads(line)["run_id"] == run_id
+        for line in (tmp_path / "outputs" / "experiments.jsonl").read_text().splitlines()
+    )
 
     rc = cli.main(["report", "--run-id", run_id])
     assert rc == 0

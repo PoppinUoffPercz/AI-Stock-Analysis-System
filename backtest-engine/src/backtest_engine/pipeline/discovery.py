@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 
 from backtest_engine.data.universe import Universe
+from backtest_engine.reproducibility import build_manifest
 from backtest_engine.strategy.adapters.bt_adapter import BTAdapter
 from backtest_engine.strategy.adapters.vbt_adapter import VBTAdapter
 from backtest_engine.strategy.base import EngineAdapter
@@ -44,6 +45,9 @@ def run_spec(
     params: dict[str, Any] | None = None,
     run_id: str | None = None,
     universe: Universe | str | Path | None = None,
+    random_seed: int | None = None,
+    relevant_args: dict[str, Any] | None = None,
+    dataset_identity: dict[str, Any] | None = None,
 ) -> BacktestResult:
     """Execute `spec` through `engine`, optionally enforcing point-in-time membership."""
     if universe is not None:
@@ -56,9 +60,9 @@ def run_spec(
     adapter = get_adapter(engine)
     use_cost = cost_model or spec.cost_model
     use_cap = capital if capital is not None else spec.capital
-    use_params = params or spec.params
+    use_params = params if params is not None else spec.params
     signals = spec.make_signals(ohlc, use_params)
-    return adapter.run(
+    result = adapter.run(
         signals,
         ohlc,
         capital=use_cap,
@@ -68,3 +72,21 @@ def run_spec(
         params=use_params,
         run_id=run_id,
     )
+    if not isinstance(result, BacktestResult):
+        return result
+    result.manifest = build_manifest(
+        run_id=result.run_id,
+        strategy_name=spec.name,
+        signal_factory=spec.signal_factory,
+        engine=result.engine,
+        params=use_params,
+        capital=use_cap,
+        cost_model=use_cost,
+        universe_ref=spec.universe_ref,
+        ohlc=ohlc,
+        universe=universe if isinstance(universe, (str, Path)) else None,
+        random_seed=random_seed,
+        relevant_args=relevant_args,
+        dataset_identity=dataset_identity,
+    )
+    return result

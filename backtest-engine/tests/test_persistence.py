@@ -73,6 +73,38 @@ def test_backtest_result_round_trip_preserves_research_fields(tmp_path):
     assert loaded.raw_metrics == original.raw_metrics
     assert loaded.metrics == original.metrics
     assert loaded.metadata == original.metadata
+    assert loaded.manifest is not None
+    assert loaded.manifest.run_id == original.run_id
+    assert (tmp_path / "manifest.json").exists()
+
+
+def test_manifest_is_write_once(tmp_path):
+    result = _result()
+    persist_result(result, tmp_path)
+    manifest_text = (tmp_path / "manifest.json").read_text(encoding="utf-8")
+
+    persist_result(result, tmp_path)
+    assert (tmp_path / "manifest.json").read_text(encoding="utf-8") == manifest_text
+
+    result.params["fast"] = 6
+    result.manifest = None
+    with pytest.raises(FileExistsError, match="immutable manifest"):
+        persist_result(result, tmp_path)
+
+
+def test_persistence_rejects_result_manifest_run_id_mismatch(tmp_path):
+    result = _result()
+    persist_result(result, tmp_path)
+    result.run_id = "different-run"
+
+    with pytest.raises(ValueError, match="manifest run_id"):
+        persist_result(result, tmp_path)
+
+    payload = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
+    payload["run_id"] = "tampered-run"
+    (tmp_path / "result.json").write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="manifest run_id"):
+        load_result(tmp_path / "result.json")
 
 
 def test_persist_result_uses_atomic_json_payload(tmp_path):

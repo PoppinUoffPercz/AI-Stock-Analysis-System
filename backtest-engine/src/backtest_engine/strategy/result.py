@@ -13,7 +13,10 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from numbers import Real
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from backtest_engine.reproducibility import RunManifest
 
 import numpy as np
 import pandas as pd
@@ -51,6 +54,7 @@ class BacktestResult:
     raw_metrics: dict[str, Any] = field(default_factory=dict)
     metrics: dict[str, float] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    manifest: RunManifest | None = None
 
     @property
     def n_trades(self) -> int:

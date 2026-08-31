@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from backtest_engine.experiment_index import ExperimentIndex
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
 from backtest_engine.strategy.persistence import persist_result
 
@@ -129,6 +130,19 @@ def render_report(
             indent=2,
         ),
         encoding="utf-8",
+    )
+
+    manifest = result.manifest
+    if manifest is None:
+        raise RuntimeError("persisted result did not receive a manifest")
+    ExperimentIndex(Path(cfg.outputs_dir) / "experiments.jsonl").append(
+        manifest,
+        artifacts={
+            "manifest": f"{cfg.run_id}/manifest.json",
+            "metrics": f"{cfg.run_id}/metrics.json",
+            "report": f"{cfg.run_id}/report.html",
+            "result": f"{cfg.run_id}/result.json",
+        },
     )
 
     return ReportResult(

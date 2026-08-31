@@ -53,6 +53,12 @@ def test_render_report_writes_html_and_metrics(tmp_path: Path):
     assert rr.html_path == out_dir / "report.html"
     assert rr.html_path.exists()
     assert (out_dir / "metrics.json").exists()
+    assert (out_dir / "manifest.json").exists()
+    entries = [
+        json.loads(line) for line in (tmp_path / "experiments.jsonl").read_text().splitlines()
+    ]
+    assert entries[0]["run_id"] == "m7-test"
+    assert entries[0]["artifacts"]["result"] == "r1/result.json"
 
     loaded = json.loads((out_dir / "metrics.json").read_text())
     for key in ("total_return", "sharpe", "max_drawdown"):

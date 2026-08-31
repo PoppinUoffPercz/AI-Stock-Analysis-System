@@ -61,7 +61,7 @@ NautilusTrader replay currently supports daily bars and the zero-cost model only
 
 ## Cost Fidelity and Benchmarks
 
-VectorBT supports exact zero and proportional costs in this project. It rejects per-share commissions with minimums and nonlinear volume-impact slippage because approximating them would make cross-engine results misleading. Backtrader supports the named per-fill models.
+The available cost presets are `zero`, `us_equity_proportional`, `us_equity_pershare`, and `us_equity_flat`. VectorBT supports exact `zero` and proportional costs. It rejects per-share commissions with minimums and nonlinear volume-impact slippage because approximating them would make cross-engine results misleading. Backtrader supports the named per-fill models.
 
 The included buy-and-hold benchmark covers one symbol from first available open to final close with no costs. It is explicitly unavailable for multiasset results.
 

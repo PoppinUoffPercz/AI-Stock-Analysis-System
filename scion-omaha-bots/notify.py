@@ -119,7 +119,8 @@ class ScionNotifier:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                shell=False,
             )
 
             # Send initialize

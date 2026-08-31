@@ -71,3 +71,41 @@ def test_walk_forward_rejects_too_few_valid_folds():
             param_grid={"mode": [0, 1]},
             min_valid_folds=1,
         )
+
+
+def test_walk_forward_warms_first_oos_signal_without_pre_oos_portfolio_state():
+    from notebooks.strategy_bench import run_walk_forward
+
+    index = pd.bdate_range("2020-01-01", "2022-12-30", tz="UTC")
+    close = pd.Series(np.arange(len(index), dtype=float) + 100.0, index=index)
+    bars = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+            "volume": 1_000_000.0,
+        },
+        index=index,
+    )
+    first_signal_dates: list[pd.Timestamp] = []
+
+    def warmup_strategy(history: pd.DataFrame, params: dict) -> pd.DataFrame:
+        valid = history["close"].rolling(int(params["period"])).mean().notna()
+        signals = pd.DataFrame({"entry": False, "exit": False}, index=history.index)
+        signals.loc[valid, "entry"] = True
+        if valid.any():
+            first_signal_dates.append(valid[valid].index[0])
+        return signals
+
+    result = run_walk_forward(
+        StrategySpec(name="warmup", signal_factory=warmup_strategy, params={"period": 20}),
+        bars,
+        is_years=1,
+        oos_years=1,
+        param_grid={"period": [20]},
+    )
+
+    first_oos = result.oos_intervals[0][0]
+    assert result.oos_equity.index[0] == first_oos
+    assert first_signal_dates[-1] < first_oos

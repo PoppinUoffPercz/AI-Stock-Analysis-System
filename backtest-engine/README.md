@@ -1,66 +1,88 @@
 # backtest-engine
 
-Research-first backtesting engine. Three-phase workflow on free data:
+The primary executable in the repository: a Python 3.12+ backtesting platform built for reproducible simulation and independent verification.
 
-- **Phase 1 — Discovery**: VectorBT vectorized parameter sweeps
-- **Phase 2 — Validation**: Backtrader event-driven with realistic fills/slippage/commissions
-- **Phase 3 — Deployment**: NautilusTrader execution-parity replay; bridge to paper/live
+- **Discover:** VectorBT runs fast vectorized experiments.
+- **Validate:** Backtrader replays the same pandas signals through an event-driven engine with per-fill cost modeling.
+- **Replay:** optional NautilusTrader daily-bar execution replay.
+- **Verify:** canonical results, immutable manifests, reports, benchmarks, and an append-only JSONL experiment index preserve the evidence behind each run.
 
-Full design: see `PLAN.md` / `Backtest Engine Build Plan.md` in Obsidian.
+Signals execute at the next bar's open. Real persisted data is the default; synthetic data is never selected implicitly. A point-in-time universe CSV can filter bars before signal generation and execution.
 
 ## Install
 
-Requires Python 3.12 or newer.
+From this directory on PowerShell:
 
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
 ```
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e ".[dev]"
-pre-commit install
+
+## Offline Acceptance Demo
+
+```powershell
+python -m scripts.run_offline_demo
 ```
 
-## Usage
+This deterministic, network-free command uses checked-in CSV fixtures to exercise ingestion, point-in-time filtering, strategy execution, exact zero/proportional VectorBT costs, benchmarking, persistence, manifest reload, JSONL indexing, comparison, and offline HTML reporting. Use `--output-root <path>` to change its artifact directory.
 
-```
-# Real persisted clean data is the default.
-bte discover --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
-bte validate --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
-bte report   --run-id <run-id-from-discover-or-validate>
+## CLI Workflow
 
-# Synthetic data is explicit and intended for offline demos.
+```powershell
+# Ingest a local fixture into data/clean/<SYMBOL>/<YEAR>.parquet.
+bte ingest --source csv --input tests/fixtures/offline_demo/bars.csv --symbol DEMO --data-root demo-data
+
+# Discovery and event-driven validation on that persisted dataset.
+bte discover --strategy sma_cross --symbol DEMO --data-root demo-data --universe-csv tests/fixtures/offline_demo/universe.csv --cost zero
+bte validate --strategy sma_cross --symbol DEMO --data-root demo-data --universe-csv tests/fixtures/offline_demo/universe.csv --cost us_equity_pershare
+
+# Compare run IDs printed by the preceding commands.
+bte compare --run-id <first-run-id> --run-id <second-run-id>
+bte compare --run-id <first-run-id> --run-id <second-run-id> --json
+
+# Reload a persisted result and regenerate its report without rerunning.
+bte report --run-id <run-id>
+
+# Explicit deterministic synthetic discovery.
 bte discover --strategy sma_cross --synthetic --days 756 --seed 42
-
-# Optional daily-bar replay through NautilusTrader.
-pip install -e ".[execution]"
-bte replay --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
 ```
 
-Each successful run writes the complete `result.json`, `metrics.json`, and
-`report.html` under `outputs/<run-id>/` and prints the artifact paths. Report
-generation reloads `result.json`; it does not rerun the strategy.
+Successful normal runs write `result.json`, `manifest.json`, `metrics.json`, and `report.html` under `outputs/<run-id>/` and append to `outputs/experiments.jsonl`. Missing clean data, malformed or mismatched artifacts, corrupt index records, invalid universes, and unsupported engine assumptions produce explicit errors.
 
-For the reproducible real-data acceptance workflow, run
-`python -m scripts.run_v1_acceptance` from this directory after the clean cache
-is available.
+## Optional Replay
 
-For a deterministic, network-free end-to-end acceptance demo using checked-in
-CSV fixtures, run `python -m scripts.run_offline_demo`. Pass
-`--output-root <path>` to write artifacts elsewhere. The command prints PASS or
-FAIL checks and exits nonzero on failure; its report disables QuantStats and
-Plotly so it has no network or CDN requirements.
+```powershell
+python -m pip install -e ".[execution]"
+bte replay --strategy sma_cross --symbol DEMO --data-root demo-data --universe-csv tests/fixtures/offline_demo/universe.csv --cost zero
+```
 
-To measure the fixed representative VectorBT `run_spec` workload without a CI
-performance threshold, run `python -m scripts.benchmark_runtime`. The JSON output
-includes elapsed seconds, workload dimensions, Python/platform details, and
-relevant dependency versions.
+NautilusTrader replay currently supports daily bars and the zero-cost model only. It is an execution-parity experiment, not paper/live integration.
 
-## Status
+## Cost Fidelity and Benchmarks
 
-v1 research and validation milestones M0-M8 are implemented. The M9 boundary
-adds optional NautilusTrader daily-bar replay with the same strategy contract.
-The current replay adapter supports the zero-cost model and is not paper/live
-trading integration.
+VectorBT supports exact zero and proportional costs in this project. It rejects per-share commissions with minimums and nonlinear volume-impact slippage because approximating them would make cross-engine results misleading. Backtrader supports the named per-fill models.
+
+The included buy-and-hold benchmark covers one symbol from first available open to final close with no costs. It is explicitly unavailable for multiasset results.
+
+## Validation and Reproducibility
+
+The library includes walk-forward, parameter-stability, permutation, and Monte Carlo validation utilities. Walk-forward optimization sees only in-sample data, freezes parameters for each out-of-sample fold, and rejects overlapping OOS windows.
+
+Every pipeline result carries a manifest identity derived from strategy, parameters, engine, cost configuration, filtered data content, universe content, random seed, relevant arguments, Git state, Python, and dependency versions. Manifests are immutable for a run ID; result writes are atomic; loading validates schemas and manifest/result consistency; malformed JSONL records report the corrupt line.
+
+## Verification
+
+```powershell
+python -m pytest -q
+python -m ruff check .
+python -m mypy src/backtest_engine
+python -m scripts.run_offline_demo
+python -m scripts.benchmark_runtime
+```
+
+The runtime benchmark records its workload and environment but has no machine-dependent pass/fail threshold. A real-data acceptance workflow is available as `python -m scripts.run_v1_acceptance` after its expected clean cache has been populated.
 
 ## License
 
-MIT.
+[MIT](../LICENSE).

@@ -1,69 +1,166 @@
-# Stock Analysis System
+# REPRODUCIBLE SIMULATION AND VERIFICATION PLATFORM
 
-This project packages the executable research system behind the stock-analysis workflow:
+This repository is centered on [`backtest-engine`](backtest-engine/): a Python 3.12+ platform for turning a market-data snapshot and a strategy specification into an auditable research result. It separates fast discovery from event-driven validation, records the inputs behind every run, and fails explicitly when an engine cannot honor a requested assumption.
 
-- `scion-omaha-bots/` — Scion-Bot (Michael Burry-style swing analysis) and Omaha-Bot (Warren Buffett-style quality-compounder analysis).
-- `backtest-engine/` — research-first strategy testing: VectorBT discovery, Backtrader validation, validation/reporting utilities, and optional NautilusTrader replay.
-- `frameworks/` — the agent profiles, prompts, methodologies, risk rules, data-source definitions, and model-facing skills used to guide analysis.
-- `docs/` — architecture, operating procedures, and backtesting design notes.
+The goal is not to manufacture a favorable backtest. The goal is to make a result reproducible, inspectable, and difficult to obtain through accidental leakage.
 
-## Quick start
+## What It Demonstrates
 
-### Dual agents
+- A shared pandas signal contract across VectorBT discovery and Backtrader validation.
+- Next-bar-open execution to prevent a signal from trading on the same observation that created it.
+- Point-in-time universe filtering with listing and delisting boundaries.
+- Walk-forward utilities that optimize only in-sample, freeze parameters out-of-sample, and reject overlapping OOS windows.
+- Named execution-cost models with explicit engine compatibility checks.
+- Immutable, content-addressed run manifests containing data, universe, strategy, configuration, code, seed, and runtime provenance.
+- Atomic result persistence, an append-only JSONL experiment index, and corruption checks with actionable file and line errors.
+- Reloadable reports and comparisons that use persisted results instead of silently rerunning a strategy.
 
-```powershell
-cd scion-omaha-bots
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+## Architecture
 
-# Scion-Bot (Burry-style swing system)
-python main.py screener
-python main.py analyze PFE
-
-# Omaha-Bot (Buffett-style compounder system)
-python buffett_main.py screener
-python buffett_main.py analyze KO
+```text
+CSV / yfinance / Stooq
+          |
+          v
+validate + normalize -> partitioned Parquet clean store
+          |
+          +-> point-in-time universe filter
+          |
+          v
+pandas strategy signals
+          |
+          +-> VectorBT discovery
+          +-> Backtrader validation
+          +-> NautilusTrader replay (optional)
+          |
+          v
+canonical BacktestResult + benchmark + metrics
+          |
+          v
+result.json / manifest.json / metrics.json / report.html
+          |
+          v
+append-only experiments.jsonl -> compare persisted runs
 ```
 
-The bots are paper-trading/research tools. They do not execute real trades. Optional OpenBB, Obsidian, and WhatsApp integrations require separate local configuration and credentials.
+The strategy layer is deliberately engine-neutral. Adapters translate the same signals into engine-specific execution while returning one canonical result model. See [`backtest-engine/README.md`](backtest-engine/README.md) for the command reference and [`docs/architecture/12-Backtest-Engine.md`](docs/architecture/12-Backtest-Engine.md) for the design background.
 
-### Backtesting engine
+## Validation Philosophy
+
+The platform treats research controls as executable constraints:
+
+- **Anti-leakage:** signals are shifted to the next bar for VectorBT fills; signal frames and persisted results are validated before use.
+- **Point-in-time universes:** an optional membership CSV filters every bar by `list_date` and `delist_date`, reducing survivorship bias rather than assuming today's constituents existed historically.
+- **Walk-forward evaluation:** rolling, half-open in-sample and out-of-sample windows keep optimization away from future observations and stitch only OOS equity.
+- **Reproducibility:** stable manifest fields are hashed; run timestamps and IDs remain provenance rather than changing experiment identity.
+- **Artifact integrity:** manifests are write-once for a run identity, result writes are atomic, mismatched or malformed artifacts raise explicit errors, and corrupt JSONL records identify their line number.
+- **No silent fallback:** missing clean data does not become synthetic data. Synthetic runs require `--synthetic`, unsupported costs fail fast, and unavailable benchmarks are labeled unavailable.
+
+These controls improve confidence in a simulation; they do not establish that a strategy will perform in live markets.
+
+## Quick Start
+
+Use Python 3.12 or newer. From the repository root on PowerShell:
 
 ```powershell
 cd backtest-engine
-python -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-
-# Real persisted clean data is the default.
-bte discover --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
-bte validate --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
-bte report --run-id <run-id-from-discover-or-validate>
-
-# Synthetic data is opt-in for an offline demo.
-bte discover --strategy sma_cross --synthetic --days 756 --seed 42
-
-# Optional NautilusTrader daily-bar replay.
-pip install -e ".[execution]"
-bte replay --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
-python -m pytest -q
+python -m pip install -e ".[dev]"
 ```
 
-The real-data commands read `data/clean/<SYMBOL>/<YEAR>.parquet` and fail clearly when the requested cache is missing. Each run persists a complete `result.json` beside its metrics and report, so `bte report` reloads the saved result without rerunning the strategy. A reproducible small real-data acceptance run is available with `python -m scripts.run_v1_acceptance` from `backtest-engine`.
+Run the exact deterministic, network-free demonstration:
 
-Read `docs/architecture/12-Backtest-Engine.md` for the intended discovery → validation → replay workflow.
+```powershell
+python -m scripts.run_offline_demo
+```
 
-## Framework order
+It ingests the checked-in CSV fixture, applies point-in-time universe membership, runs zero-cost and proportional-cost VectorBT simulations, persists and reloads their artifacts, indexes and compares both runs, and creates offline HTML reports. It prints a JSON result with `"status": "PASS"` or exits nonzero.
 
-1. Read `frameworks/agents/` for the Scion/Omaha personas and agent definitions.
-2. Read `frameworks/prompts/` for reusable research and council prompts.
-3. Read `frameworks/methodologies/` and `frameworks/risk/` for the investment and risk rules.
-4. Read `frameworks/skills/` for model-facing operating instructions such as the credit-monitor skill.
-5. Use `docs/architecture/` for system wiring, data flow, and operational details.
+## Research Workflow
 
-## Provenance
+### 1. Ingest
 
-The source inventory and exclusions are recorded in `SOURCE-MANIFEST.md`. Generated reports, portfolios, logs, caches, backups, downloaded data, personal configuration, and credentials are intentionally excluded.
+Create the canonical partitioned clean-data store from a local CSV:
 
-This repository is for research and education only and is not financial advice.
+```powershell
+bte ingest --source csv --input tests/fixtures/offline_demo/bars.csv --symbol DEMO --data-root demo-data
+```
+
+Network-backed `yfinance` and `stooq` sources are also available. Input validation rejects malformed OHLCV data instead of persisting it.
+
+### 2. Discover
+
+Run fast VectorBT discovery against persisted data and an optional point-in-time universe:
+
+```powershell
+bte discover --strategy sma_cross --symbol DEMO --data-root demo-data --universe-csv tests/fixtures/offline_demo/universe.csv --cost zero
+```
+
+For an explicit synthetic smoke run:
+
+```powershell
+bte discover --strategy sma_cross --synthetic --days 756 --seed 42
+```
+
+### 3. Validate
+
+Re-run the strategy through Backtrader's event-driven path:
+
+```powershell
+bte validate --strategy sma_cross --symbol DEMO --data-root demo-data --universe-csv tests/fixtures/offline_demo/universe.csv --cost us_equity_pershare
+```
+
+The Python validation package also provides walk-forward, parameter-stability, permutation, and Monte Carlo tools. These are library APIs, not separate `bte` subcommands.
+
+### 4. Compare
+
+Compare explicit persisted runs using IDs printed by `discover` or `validate`:
+
+```powershell
+bte compare --run-id <first-run-id> --run-id <second-run-id>
+bte compare --run-id <first-run-id> --run-id <second-run-id> --json
+```
+
+### 5. Report
+
+Regenerate a report from the saved canonical result without rerunning the strategy:
+
+```powershell
+bte report --run-id <run-id>
+```
+
+Each normal run writes `result.json`, `manifest.json`, `metrics.json`, and `report.html` under `backtest-engine/outputs/<run-id>/`, then appends its summary to `backtest-engine/outputs/experiments.jsonl`.
+
+## Verification
+
+From `backtest-engine/` with the development dependencies installed:
+
+```powershell
+python -m pytest -q
+python -m ruff check .
+python -m mypy src/backtest_engine
+python -m scripts.run_offline_demo
+python -m scripts.benchmark_runtime
+```
+
+The benchmark reports workload and environment metadata; it intentionally does not impose a machine-dependent CI timing threshold.
+
+## Scope and Limitations
+
+- VectorBT has exact cost support here only for zero and proportional models. Per-share commissions with minimums and nonlinear volume-impact models cannot be represented exactly and fail fast; use Backtrader for those models.
+- The built-in buy-and-hold benchmark requires exactly one symbol. Multiasset results record the benchmark as unavailable rather than inventing an aggregation rule.
+- Point-in-time correctness depends on the supplied universe history. The included sample and demo fixtures are not a complete survivorship-free market database.
+- Market-data sources can contain errors, revisions, missing observations, and corporate-action differences. Validation and optional source cross-checks reduce, but do not eliminate, this risk.
+- NautilusTrader is an optional daily-bar replay adapter installed with `python -m pip install -e ".[execution]"`. It currently supports only the zero-cost model and is not a paper- or live-trading integration.
+- The platform models research assumptions; it does not model every exchange, broker, latency, liquidity, tax, borrow, or market-impact condition.
+
+## Other Repository Content
+
+- [`scion-omaha-bots/`](scion-omaha-bots/) contains separate experimental Scion and Omaha stock-research and paper-tracking tools. They are not integrated consumers of `backtest-engine`, and they do not execute real trades.
+- [`frameworks/`](frameworks/) contains research methodologies, prompts, risk notes, data-source references, and agent profiles used by those experiments.
+- [`docs/`](docs/) contains architecture and operating notes.
+- [`SOURCE-MANIFEST.md`](SOURCE-MANIFEST.md) records the repository's source inventory and exclusions.
+
+## License
+
+Licensed under the [MIT License](LICENSE). This repository is for research and education and is not financial advice.

@@ -17,6 +17,7 @@ import csv
 import io
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Final
 
 import numpy as np
@@ -27,6 +28,7 @@ from backtest_engine.config import Settings
 
 SOURCE_YFINANCE: Final[str] = "yfinance"
 SOURCE_STOOQ: Final[str] = "stooq"
+SOURCE_CSV: Final[str] = "csv"
 
 RAW_FILE_COLUMNS: Final[tuple[str, ...]] = (
     "timestamp",
@@ -51,6 +53,41 @@ class Source(ABC):
 
     @abstractmethod
     def fetch(self, symbol: str, start: str | None, end: str | None) -> pd.DataFrame: ...
+
+
+class CsvSource(Source):
+    """Offline local CSV adapter for common Date/Open/High/Low/Close/Volume files."""
+
+    name = SOURCE_CSV
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    def fetch(self, symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
+        if not self.path.is_file():
+            raise ValueError(f"CSV input does not exist: {self.path}")
+        try:
+            frame = pd.read_csv(self.path)
+        except (OSError, pd.errors.ParserError) as exc:
+            raise ValueError(f"could not read CSV input {self.path}: {exc}") from exc
+        frame = frame.rename(columns={column: column.strip().lower() for column in frame.columns})
+        if "date" in frame.columns and "timestamp" not in frame.columns:
+            frame = frame.rename(columns={"date": "timestamp"})
+        required = {"timestamp", "open", "high", "low", "close", "volume"}
+        missing = sorted(required - set(frame.columns))
+        if missing:
+            raise ValueError(f"missing required columns: {missing}")
+        try:
+            frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True, errors="raise")
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid timestamp values in CSV input") from exc
+        for column in required - {"timestamp"}:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        if start:
+            frame = frame[frame["timestamp"] >= pd.Timestamp(start, tz="UTC")]
+        if end:
+            frame = frame[frame["timestamp"] <= pd.Timestamp(end, tz="UTC")]
+        return frame
 
 
 # ---------------------------------------------------------------------------

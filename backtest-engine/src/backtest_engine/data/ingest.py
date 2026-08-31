@@ -20,6 +20,7 @@ import pandas as pd
 from backtest_engine.data.clean import validate_clean
 from backtest_engine.data.sources.base import (
     SOURCE_YFINANCE,
+    CsvSource,
     StooqSource,
     YFinanceSource,
 )
@@ -27,7 +28,7 @@ from backtest_engine.data.store import read_clean, write_clean
 
 log = logging.getLogger(__name__)
 
-SourceName = Literal["yfinance", "stooq"]
+SourceName = Literal["csv", "yfinance", "stooq"]
 
 _DISAGREEMENT_THRESHOLD = 0.005  # 0.5%
 
@@ -41,9 +42,14 @@ def ingest_symbol(
     clean_root: Path,
     universe_root: Path,
     cross_check: bool = True,
+    input_path: Path | None = None,
 ) -> tuple[int, Path | None]:
     """Fetch, clean, write parquet. Returns rows and an optional boundary file."""
-    if source == SOURCE_YFINANCE:
+    if source == "csv":
+        if input_path is None:
+            raise ValueError("CSV source requires an input path")
+        df = CsvSource(input_path).fetch(symbol, start=start, end=end)
+    elif source == SOURCE_YFINANCE:
         df = YFinanceSource().fetch(symbol, start=start, end=end)
     else:
         df = StooqSource().fetch(symbol, start=start, end=end)

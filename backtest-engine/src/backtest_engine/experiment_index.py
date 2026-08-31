@@ -17,7 +17,13 @@ class ExperimentIndex:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
 
-    def append(self, manifest: RunManifest, *, artifacts: dict[str, str] | None = None) -> None:
+    def append(
+        self,
+        manifest: RunManifest,
+        *,
+        artifacts: dict[str, str] | None = None,
+        benchmark: dict[str, Any] | None = None,
+    ) -> None:
         record = {
             "run_id": manifest.run_id,
             "identity_hash": manifest.identity_hash,
@@ -27,6 +33,7 @@ class ExperimentIndex:
             "params": manifest.stable.get("params", {}),
             "data_hash": manifest.stable.get("data", {}).get("content_sha256"),
             "artifacts": artifacts or {},
+            "benchmark": benchmark,
         }
         line = canonical_json(record) + "\n"
         with _LOCK:

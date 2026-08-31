@@ -62,6 +62,16 @@ def render_report(
         key: value if np.isfinite(value) else 0.0
         for key, value in attach_metric_panel(result).items()
     }
+    benchmark = result.metadata.get("benchmark", {})
+    if benchmark.get("status") == "available":
+        metrics.update(
+            {
+                "benchmark_total_return": float(benchmark["total_return"]),
+                "strategy_cost_addback_return": float(benchmark["strategy_cost_addback_return"]),
+                "strategy_net_return": float(benchmark["strategy_net_return"]),
+                "relative_net_performance": float(benchmark["relative_net_performance"]),
+            }
+        )
     flags = bias_audit(metrics)
     result.metrics = metrics
 
@@ -111,6 +121,8 @@ def render_report(
 <h1>Backtest Report - {cfg.run_id}</h1>
 <h2>Metrics</h2>
 <pre>{json.dumps({k: float(v) if isinstance(v, (int, float, np.floating)) else str(v) for k, v in metrics.items()}, indent=2)}</pre>
+<h2>Benchmark</h2>
+<pre>{json.dumps(benchmark, indent=2)}</pre>
 <h2>Bias audit flags</h2>
 <pre>{json.dumps({k: str(v) for k, v in flags.items()}, indent=2)}</pre>
 {panels_html}
@@ -143,6 +155,7 @@ def render_report(
             "report": f"{cfg.run_id}/report.html",
             "result": f"{cfg.run_id}/result.json",
         },
+        benchmark=benchmark or None,
     )
 
     return ReportResult(

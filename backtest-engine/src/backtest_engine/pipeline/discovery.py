@@ -11,6 +11,7 @@ from typing import Any
 
 import pandas as pd
 
+from backtest_engine.benchmark import attach_buy_and_hold_benchmark
 from backtest_engine.data.universe import Universe
 from backtest_engine.reproducibility import build_manifest
 from backtest_engine.strategy.adapters.bt_adapter import BTAdapter
@@ -74,6 +75,7 @@ def run_spec(
     )
     if not isinstance(result, BacktestResult):
         return result
+    attach_buy_and_hold_benchmark(result, ohlc)
     result.manifest = build_manifest(
         run_id=result.run_id,
         strategy_name=spec.name,

@@ -121,7 +121,11 @@ class Universe:
         active = joined["_known"].fillna(False).astype(bool)
         active &= joined["list_date"].isna() | (joined["list_date"] <= joined["timestamp"])
         active &= joined["delist_date"].isna() | (joined["delist_date"] > joined["timestamp"])
-        keep = active.groupby(joined["_row"], sort=False).any().reindex(range(len(out)), fill_value=False)
+        keep = (
+            active.groupby(joined["_row"], sort=False)
+            .any()
+            .reindex(range(len(out)), fill_value=False)
+        )
         return out.iloc[keep.to_numpy()]
 
 

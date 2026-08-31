@@ -7,7 +7,7 @@ import os
 import tempfile
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -197,7 +197,7 @@ def _mapping(value: object, field_name: str) -> dict[str, Any]:
 
 def _float(value: object, field_name: str) -> float:
     try:
-        return float(value)
+        return float(cast(Any, value))
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"{field_name} must be numeric") from exc
 

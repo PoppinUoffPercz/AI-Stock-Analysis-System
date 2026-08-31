@@ -484,9 +484,7 @@ def test_universe_filter_panel_is_vectorized_equivalent_and_preserves_order_and_
 
 def test_universe_filter_panel_supports_single_symbol_indexed_ohlc():
     universe = Universe(
-        pd.DataFrame(
-            [{"symbol": "AAA", "list_date": "2020-01-02", "delist_date": "2020-01-05"}]
-        )
+        pd.DataFrame([{"symbol": "AAA", "list_date": "2020-01-02", "delist_date": "2020-01-05"}])
     )
     index = pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-04", "2020-01-05"])
     ohlc = pd.DataFrame({"close": [1.0, 2.0, 3.0, 4.0]}, index=index)

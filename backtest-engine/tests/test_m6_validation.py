@@ -346,7 +346,9 @@ def test_walk_forward_uses_history_for_signals_but_executes_only_oos():
         return _backtest_result_mock(pd.Series(np.arange(1, len(bars) + 1), index=bars.index))
 
     result = walk_forward(
-        StrategySpec(name="warmup", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)),
+        StrategySpec(
+            name="warmup", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+        ),
         ohlc,
         run_engine=run_engine,
         optimize=optimize,
@@ -369,7 +371,9 @@ def test_walk_forward_accepts_adjacent_oos_windows_and_sorts_output():
         return _backtest_result_mock(equity)
 
     result = walk_forward(
-        StrategySpec(name="adjacent", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)),
+        StrategySpec(
+            name="adjacent", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+        ),
         ohlc,
         run_engine=run_engine,
         optimize=lambda _spec, _bars: {},
@@ -388,7 +392,9 @@ def test_walk_forward_rejects_overlapping_oos_windows():
 
     with pytest.raises(ValueError, match="OOS windows must not overlap"):
         walk_forward(
-            StrategySpec(name="overlap", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)),
+            StrategySpec(
+                name="overlap", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+            ),
             ohlc,
             run_engine=lambda *_args, **_kwargs: None,
             optimize=lambda _spec, _bars: {},
@@ -402,12 +408,18 @@ def test_walk_forward_rejects_duplicate_stitched_dates():
     ohlc = pd.DataFrame({"close": np.arange(6, dtype=float)}, index=index)
 
     def run_engine(_spec, bars, *, run_id, **_kwargs):
-        equity_index = bars.index if run_id.startswith("wf-is") else bars.index.insert(1, bars.index[0])
-        return _backtest_result_mock(pd.Series(np.arange(1, len(equity_index) + 1), index=equity_index))
+        equity_index = (
+            bars.index if run_id.startswith("wf-is") else bars.index.insert(1, bars.index[0])
+        )
+        return _backtest_result_mock(
+            pd.Series(np.arange(1, len(equity_index) + 1), index=equity_index)
+        )
 
     with pytest.raises(ValueError, match="duplicate OOS equity dates"):
         walk_forward(
-            StrategySpec(name="duplicate", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)),
+            StrategySpec(
+                name="duplicate", signal_factory=lambda bars, params: pd.DataFrame(index=bars.index)
+            ),
             ohlc,
             run_engine=run_engine,
             optimize=lambda _spec, _bars: {},

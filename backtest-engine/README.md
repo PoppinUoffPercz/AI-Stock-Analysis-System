@@ -10,6 +10,8 @@ Full design: see `PLAN.md` / `Backtest Engine Build Plan.md` in Obsidian.
 
 ## Install
 
+Requires Python 3.12 or newer.
+
 ```
 python -m venv .venv
 .venv\Scripts\activate

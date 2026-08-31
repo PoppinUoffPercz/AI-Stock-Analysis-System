@@ -223,9 +223,7 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
     engine = "backtrader" if args.cmd == "validate" else args.engine
     run_id = f"bte-{args.cmd}-{uuid.uuid4().hex[:8]}"
     try:
-        res = run_spec(
-            spec, ohlc, engine=engine, run_id=run_id, universe=args.universe_csv
-        )
+        res = run_spec(spec, ohlc, engine=engine, run_id=run_id, universe=args.universe_csv)
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -341,9 +339,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     run_id = f"bte-replay-{uuid.uuid4().hex[:8]}"
     try:
-        result = run_spec(
-            spec, ohlc, engine="nautilus", run_id=run_id, universe=args.universe_csv
-        )
+        result = run_spec(spec, ohlc, engine="nautilus", run_id=run_id, universe=args.universe_csv)
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

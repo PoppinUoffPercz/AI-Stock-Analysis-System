@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -195,7 +195,7 @@ def _cartesian(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
 
 
 def _finite_or_none(value: object) -> float | None:
-    number = float(value)
+    number = float(cast(Any, value))
     return number if math.isfinite(number) else None
 
 
@@ -235,10 +235,10 @@ def _trade_record(row: pd.Series, ohlc: pd.DataFrame, idx: pd.Index):
         None if is_open or exit_ts is None or pd.isna(exit_ts) else pd.Timestamp(exit_ts)
     )
     exit_price = None if is_open else _get("Avg Exit Price", "Exit Price")
-    entry_reference = float(ohlc.loc[ts, "open"])
+    entry_reference = float(cast(Any, ohlc.loc[ts, "open"]))
     slippage_cost = max((fill - entry_reference) * qty, 0.0)
     if exit_timestamp is not None and exit_price is not None:
-        exit_reference = float(ohlc.loc[exit_timestamp, "open"])
+        exit_reference = float(cast(Any, ohlc.loc[exit_timestamp, "open"]))
         slippage_cost += max((exit_reference - exit_price) * qty, 0.0)
     return TradeRecord(
         timestamp=pd.Timestamp(ts),

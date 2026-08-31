@@ -97,9 +97,7 @@ def walk_forward(
         stitched = oos_equity * offset_factor
         oos_equity_parts.append(stitched)
     oos_equity = (
-        pd.concat(oos_equity_parts).sort_index()
-        if oos_equity_parts
-        else pd.Series(dtype=float)
+        pd.concat(oos_equity_parts).sort_index() if oos_equity_parts else pd.Series(dtype=float)
     )
     if oos_equity.index.has_duplicates:
         raise ValueError("duplicate OOS equity dates")
@@ -161,7 +159,6 @@ def _validate_oos_windows(
             raise ValueError("OOS windows must be non-empty half-open intervals")
     ordered = sorted(windows)
     if any(
-        start < prior_end
-        for (_, prior_end), (start, _) in zip(ordered, ordered[1:], strict=False)
+        start < prior_end for (_, prior_end), (start, _) in zip(ordered, ordered[1:], strict=False)
     ):
         raise ValueError("OOS windows must not overlap")

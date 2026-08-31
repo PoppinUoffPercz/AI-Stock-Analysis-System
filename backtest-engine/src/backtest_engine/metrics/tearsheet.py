@@ -58,7 +58,7 @@ def render_report(
       ReportResult with paths + the bias-audit panel + metrics dict.
     """
     metrics = {
-        key: value if not isinstance(value, (int, float, np.number)) or np.isfinite(value) else None
+        key: value if np.isfinite(value) else 0.0
         for key, value in attach_metric_panel(result).items()
     }
     flags = bias_audit(metrics)

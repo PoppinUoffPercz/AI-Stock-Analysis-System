@@ -43,9 +43,7 @@ def test_run_spec_filters_before_signal_factory_and_adapter(monkeypatch):
     adapter = _Adapter()
     monkeypatch.setattr(discovery, "get_adapter", lambda _engine: adapter)
     universe = Universe(
-        pd.DataFrame(
-            [{"symbol": "AAA", "list_date": "2020-01-03", "delist_date": "2020-01-05"}]
-        )
+        pd.DataFrame([{"symbol": "AAA", "list_date": "2020-01-03", "delist_date": "2020-01-05"}])
     )
 
     discovery.run_spec(_spec(seen), _ohlc(), universe=universe)

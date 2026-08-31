@@ -51,15 +51,11 @@ def _assert_cost_accounting(result, cost_addback_final_equity):
     assert result.metadata["total_commission"] == pytest.approx(commission)
     assert result.metadata["total_slippage"] == pytest.approx(slippage)
     assert result.metadata["total_execution_cost"] == pytest.approx(total)
-    assert result.metadata["cost_addback_final_equity"] == pytest.approx(
-        cost_addback_final_equity
-    )
+    assert result.metadata["cost_addback_final_equity"] == pytest.approx(cost_addback_final_equity)
     assert result.metadata["net_final_equity"] == pytest.approx(result.final_equity)
-    assert (
-        result.metadata["cost_addback_final_equity"]
-        - result.metadata["net_final_equity"]
-        == pytest.approx(total)
-    )
+    assert result.metadata["cost_addback_final_equity"] - result.metadata[
+        "net_final_equity"
+    ] == pytest.approx(total)
     expected_returns = result.equity.pct_change().fillna(0.0)
     pd.testing.assert_series_equal(result.returns, expected_returns)
 

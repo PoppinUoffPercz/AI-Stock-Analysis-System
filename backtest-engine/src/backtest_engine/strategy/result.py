@@ -13,7 +13,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from numbers import Real
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -160,7 +160,7 @@ def _validate_trade(
 
 def _utc_timestamp(value: object, field_name: str) -> pd.Timestamp:
     try:
-        timestamp = pd.Timestamp(value)
+        timestamp = pd.Timestamp(cast(Any, value))
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{field_name} must be a parseable timestamp") from exc
     if pd.isna(timestamp):

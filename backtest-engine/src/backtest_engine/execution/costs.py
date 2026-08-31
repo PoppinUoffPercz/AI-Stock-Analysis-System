@@ -139,16 +139,16 @@ PRESETS: dict[CostPreset, CostModel] = {
 }
 
 
-def get_preset(name: CostPreset) -> CostModel:
+def get_preset(name: CostPreset | str) -> CostModel:
+    if name not in PRESETS:
+        raise ValueError(f"unknown cost preset: {name!r}")
     return PRESETS[name]
 
 
 def require_exact_vectorbt_costs(cost: CostModel) -> None:
     """Reject cost models VectorBT cannot apply per fill without approximation."""
     if cost.per_share and (cost.min_commission or cost.max_commission is not None):
-        raise ValueError(
-            f"VectorBT cannot represent {cost.preset!r} commission exactly"
-        )
+        raise ValueError(f"VectorBT cannot represent {cost.preset!r} commission exactly")
     if cost.slippage_model in {"linear_impact", "sqrt_impact"} and cost.impact_k:
         raise ValueError(
             f"VectorBT cannot represent {cost.preset!r} volume-impact slippage exactly"

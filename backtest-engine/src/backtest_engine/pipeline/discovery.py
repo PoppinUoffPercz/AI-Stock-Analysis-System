@@ -47,7 +47,9 @@ def run_spec(
 ) -> BacktestResult:
     """Execute `spec` through `engine`, optionally enforcing point-in-time membership."""
     if universe is not None:
-        active_universe = universe if isinstance(universe, Universe) else Universe.from_csv(universe)
+        active_universe = (
+            universe if isinstance(universe, Universe) else Universe.from_csv(universe)
+        )
         ohlc = active_universe.filter_panel(ohlc)
         if ohlc.empty:
             raise ValueError("universe excludes every input bar")

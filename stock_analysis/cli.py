@@ -6,16 +6,34 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from .config import AppPaths
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BOT_ROOT = PROJECT_ROOT / "scion-omaha-bots"
 BACKTEST_SOURCE_ROOT = PROJECT_ROOT / "backtest-engine" / "src"
 NAMESPACES = {"scion", "omaha", "backtest", "portfolio", "tracking", "credit", "debate"}
+GLOBAL_PATH_OPTIONS = {"--state-root", "--data-root", "--outputs-root"}
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="stock-analysis",
         description="Integrated Scion, Omaha, and backtest command line interface.",
+    )
+    parser.add_argument(
+        "--state-root",
+        type=Path,
+        help="Directory for bot state and tracking files",
+    )
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        help="Directory for persisted market data",
+    )
+    parser.add_argument(
+        "--outputs-root",
+        type=Path,
+        help="Directory for backtest reports and artifacts",
     )
     subparsers = parser.add_subparsers(dest="namespace")
 
@@ -35,6 +53,32 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _result_code(result: object) -> int:
     return result if isinstance(result, int) else 0
+
+
+def _find_namespace_index(raw_args: list[str]) -> int | None:
+    index = 0
+    while index < len(raw_args):
+        token = raw_args[index]
+        if token in NAMESPACES:
+            return index
+        if token in GLOBAL_PATH_OPTIONS:
+            index += 2
+            continue
+        if any(token.startswith(f"{option}=") for option in GLOBAL_PATH_OPTIONS):
+            index += 1
+            continue
+        return None
+    return None
+
+
+def _apply_global_paths(raw_args: list[str], namespace_index: int) -> None:
+    args = build_parser().parse_args(raw_args[: namespace_index + 1])
+    AppPaths.from_args(
+        project_root=PROJECT_ROOT,
+        state_root=args.state_root,
+        data_root=args.data_root,
+        outputs_root=args.outputs_root,
+    ).apply()
 
 
 def _load_legacy_module(module_name: str):
@@ -134,9 +178,11 @@ def _run_backtest(domain_args: list[str]) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
-    if raw_args and raw_args[0] in NAMESPACES:
-        namespace = raw_args[0]
-        domain_args = raw_args[1:]
+    namespace_index = _find_namespace_index(raw_args)
+    if namespace_index is not None:
+        _apply_global_paths(raw_args, namespace_index)
+        namespace = raw_args[namespace_index]
+        domain_args = raw_args[namespace_index + 1 :]
         if namespace == "scion":
             return _result_code(_run_scion(domain_args))
         if namespace == "omaha":

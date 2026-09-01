@@ -51,7 +51,8 @@ class NewsEngine:
     def __init__(self, watchlist=None):
         self.watchlist = watchlist or []
         self.seen_titles = {}  # symbol -> set of seen titles (for dedup)
-        self._state_file = os.path.join(os.path.dirname(__file__), "news_state.json")
+        state_root = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
+        self._state_file = os.path.join(state_root, "news_state.json")
         self.load_seen_state()
 
     def load_seen_state(self):
@@ -68,6 +69,7 @@ class NewsEngine:
     def save_seen_state(self):
         # Convert sets to lists for JSON serialization
         serializable = {k: list(v) for k, v in self.seen_titles.items()}
+        os.makedirs(os.path.dirname(os.path.abspath(self._state_file)), exist_ok=True)
         with open(self._state_file, "w") as f:
             json.dump(serializable, f, indent=2)
 

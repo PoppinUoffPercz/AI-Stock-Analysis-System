@@ -10,7 +10,10 @@ import json
 import os
 import datetime
 
-REFLECTION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reflection_log.json")
+STATE_ROOT = os.environ.get(
+    "STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(os.path.abspath(__file__))
+)
+REFLECTION_FILE = os.path.join(STATE_ROOT, "reflection_log.json")
 
 
 class ReflectionLog:
@@ -24,6 +27,7 @@ class ReflectionLog:
         return []
 
     def save(self, entries):
+        os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump(entries, f, indent=2)
 

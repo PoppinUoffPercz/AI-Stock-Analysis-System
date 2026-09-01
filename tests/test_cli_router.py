@@ -63,6 +63,51 @@ def test_root_router_forwards_backtest_arguments(monkeypatch) -> None:
     assert calls == [["strats"]]
 
 
+def test_root_router_forwards_tracking_arguments(monkeypatch) -> None:
+    from stock_analysis import cli
+
+    calls = []
+
+    def runner(args: list[str]) -> int:
+        calls.append(args)
+        return 0
+
+    monkeypatch.setattr(cli, "_run_tracking", runner)
+
+    assert cli.main(["tracking", "report", "--bot", "scion"]) == 0
+    assert calls == [["report", "--bot", "scion"]]
+
+
+def test_root_router_forwards_credit_arguments(monkeypatch) -> None:
+    from stock_analysis import cli
+
+    calls = []
+
+    def runner(args: list[str]) -> int:
+        calls.append(args)
+        return 0
+
+    monkeypatch.setattr(cli, "_run_credit", runner)
+
+    assert cli.main(["credit", "status"]) == 0
+    assert calls == [["status"]]
+
+
+def test_root_router_forwards_debate_arguments(monkeypatch) -> None:
+    from stock_analysis import cli
+
+    calls = []
+
+    def runner(args: list[str]) -> int:
+        calls.append(args)
+        return 0
+
+    monkeypatch.setattr(cli, "_run_debate", runner)
+
+    assert cli.main(["debate", "AAPL", "--compile"]) == 0
+    assert calls == [["AAPL", "--compile"]]
+
+
 def test_root_router_without_namespace_prints_help(capsys) -> None:
     from stock_analysis import cli
 
@@ -95,7 +140,10 @@ def test_root_import_is_lazy() -> None:
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("namespace", ["scion", "omaha", "backtest"])
+@pytest.mark.parametrize(
+    "namespace",
+    ["scion", "omaha", "backtest", "portfolio", "tracking", "credit", "debate"],
+)
 def test_namespace_help_is_available_offline(namespace: str) -> None:
     result = run_root(namespace, "--help")
 

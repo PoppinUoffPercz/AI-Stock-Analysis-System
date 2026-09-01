@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stock-analysis-system"
+version = "0.1.0"
+description = "Thin integrated CLI for the Scion, Omaha, and backtest tools"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.5",
+]
+
+[project.scripts]
+"stock-analysis" = "stock_analysis.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["stock_analysis"]

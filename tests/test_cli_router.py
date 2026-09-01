@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -46,6 +47,29 @@ def test_root_router_forwards_omaha_arguments(monkeypatch) -> None:
 
     assert cli.main(["omaha", "--watchlist", "KO,PG", "run"]) == 0
     assert calls == [["--watchlist", "KO,PG", "run"]]
+
+
+@pytest.mark.parametrize(
+    ("runner_name", "dispatch"),
+    [("scion_main", "_run_scion"), ("omaha_main", "_run_omaha")],
+)
+def test_bot_dispatch_uses_packaged_runner(monkeypatch, runner_name, dispatch) -> None:
+    from stock_analysis import cli
+
+    calls = []
+
+    def runner(args: list[str]) -> int:
+        calls.append(args)
+        return 6
+
+    monkeypatch.setattr(
+        cli,
+        "_load_bot_package",
+        lambda: SimpleNamespace(**{runner_name: runner}),
+    )
+
+    assert getattr(cli, dispatch)(["--probe"]) == 6
+    assert calls == [["--probe"]]
 
 
 def test_root_router_forwards_backtest_arguments(monkeypatch) -> None:

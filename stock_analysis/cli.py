@@ -10,6 +10,7 @@ from .config import AppPaths
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BOT_ROOT = PROJECT_ROOT / "scion-omaha-bots"
+BOT_PACKAGE_SOURCE_ROOT = BOT_ROOT / "src"
 BACKTEST_SOURCE_ROOT = PROJECT_ROOT / "backtest-engine" / "src"
 NAMESPACES = {"scion", "omaha", "backtest", "portfolio", "tracking", "credit", "debate"}
 GLOBAL_PATH_OPTIONS = {"--state-root", "--data-root", "--outputs-root"}
@@ -88,6 +89,29 @@ def _load_legacy_module(module_name: str):
     return importlib.import_module(module_name)
 
 
+def _load_bot_package():
+    package_root = str(BOT_PACKAGE_SOURCE_ROOT)
+    if package_root not in sys.path:
+        sys.path.insert(0, package_root)
+    return importlib.import_module("scion_omaha_bots")
+
+
+def _run_packaged_bot(runner_name: str, label: str, domain_args: list[str]) -> int:
+    try:
+        package = _load_bot_package()
+        runner = getattr(package, runner_name)
+    except (AttributeError, ImportError, ModuleNotFoundError) as exc:
+        print(f"Unable to load {label} CLI component.", file=sys.stderr)
+        print(
+            f"Expected installation/source location: {BOT_PACKAGE_SOURCE_ROOT}",
+            file=sys.stderr,
+        )
+        if isinstance(exc, ModuleNotFoundError) and exc.name:
+            print(f"Missing dependency: {exc.name}", file=sys.stderr)
+        return 1
+    return _result_code(runner(domain_args))
+
+
 def _run_legacy_bot(module_name: str, label: str, domain_args: list[str]) -> int:
     try:
         module = _load_legacy_module(module_name)
@@ -103,11 +127,11 @@ def _run_legacy_bot(module_name: str, label: str, domain_args: list[str]) -> int
 
 
 def _run_scion(domain_args: list[str]) -> int:
-    return _run_legacy_bot("main", "Scion", domain_args)
+    return _run_packaged_bot("scion_main", "Scion", domain_args)
 
 
 def _run_omaha(domain_args: list[str]) -> int:
-    return _run_legacy_bot("buffett_main", "Omaha", domain_args)
+    return _run_packaged_bot("omaha_main", "Omaha", domain_args)
 
 
 def _run_shared(runner_name: str, domain_args: list[str]) -> int:

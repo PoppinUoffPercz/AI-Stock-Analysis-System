@@ -18,21 +18,13 @@ Usage:
   python buffett_main.py run                 # Full automated review cycle
 """
 
-import sys
-import os
-import datetime
 import argparse
+import datetime
+import os
+import sys
+from collections.abc import Sequence
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from buffett_screener import BuffettScreener
-from buffett_analyzer import BuffettAnalyzer
-from buffett_portfolio import BuffettPortfolioManager
-from buffett_news_engine import BuffettNewsEngine
-from notify import ScionNotifier
-from performance_tracker import log_screener_result, log_run_cycle, log_portfolio_action, snapshot_portfolio
-from earnings import get_upcoming_earnings, format_earnings_brief, format_earnings_warning
-
 
 DEFAULT_WATCHLIST = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BRK-B", "JPM", "V", "MA",
@@ -44,6 +36,9 @@ DEFAULT_WATCHLIST = [
 
 def cmd_screener(args):
     """Run the Buffett quality compounder screener."""
+    from buffett_screener import BuffettScreener
+    from notify import ScionNotifier
+
     watchlist = args.watchlist.split(",") if args.watchlist else None
     if watchlist:
         watchlist = [t.strip().upper() for t in watchlist]
@@ -85,6 +80,9 @@ def cmd_screener(args):
 
 def cmd_analyze(args):
     """Run the Four Filters deep-dive analysis."""
+    from buffett_analyzer import BuffettAnalyzer
+    from notify import ScionNotifier
+
     analyzer = BuffettAnalyzer(args.symbol)
     report = analyzer.generate_full_report()
 
@@ -98,6 +96,9 @@ def cmd_analyze(args):
 
 def cmd_portfolio(args):
     """Display portfolio summary."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     summary = pm.get_portfolio_summary()
     print(summary)
@@ -109,6 +110,9 @@ def cmd_portfolio(args):
 
 def cmd_check(args):
     """Review all positions — intrinsic value checks, no stop-losses."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     print("\n[Portfolio] Reviewing all holdings (Buffett-style)...")
     actions = pm.check_all_positions()
@@ -138,6 +142,9 @@ def cmd_check(args):
 
 def cmd_add(args):
     """Manually add a long-term compounder position."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
 
     import yfinance as yf
@@ -194,6 +201,9 @@ def cmd_add(args):
 
 def cmd_trim(args):
     """Trim an overweight position (rebalance, not exit)."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     if args.symbol not in pm.positions:
         print(f"{args.symbol} is not in the portfolio.")
@@ -217,6 +227,9 @@ def cmd_trim(args):
 
 def cmd_close(args):
     """Close a position (thesis break or strategic exit)."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     if args.symbol not in pm.positions:
         print(f"{args.symbol} is not in the portfolio.")
@@ -240,6 +253,9 @@ def cmd_close(args):
 
 def cmd_news(args):
     """Scan the Buffett watchlist for moat-threatening news."""
+    from buffett_news_engine import BuffettNewsEngine
+    from notify import ScionNotifier
+
     watchlist = args.watchlist.split(",") if args.watchlist else DEFAULT_WATCHLIST
     watchlist = [t.strip().upper() for t in watchlist]
 
@@ -323,6 +339,10 @@ def _fmt_val(val, style="float"):
 
 def cmd_premarket(args):
     """Generate a pre-market briefing and watchlist for today's open."""
+    from buffett_news_engine import BuffettNewsEngine
+    from buffett_screener import BuffettScreener
+    from earnings import format_earnings_brief, get_upcoming_earnings
+
     print("\n" + "=" * 60)
     print("  OMAHA-BOT: PRE-MARKET BRIEFING")
     print(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -499,6 +519,11 @@ def cmd_premarket(args):
 
 def cmd_combined(args):
     """Show combined portfolio view (Omaha-Bot + Scion-Bot)."""
+    import json
+
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     print("\n" + "=" * 60)
     print("  COMBINED DUAL-AGENT PORTFOLIO VIEW")
     print("=" * 60)
@@ -601,6 +626,23 @@ def cmd_run(args):
       4. Scan news for moat threats
       5. Send consolidated WhatsApp alert
     """
+    import yfinance as yf
+    from buffett_analyzer import BuffettAnalyzer
+    from buffett_news_engine import BuffettNewsEngine
+    from buffett_portfolio import BuffettPortfolioManager
+    from buffett_screener import BuffettScreener
+    from earnings import (
+        format_earnings_brief,
+        format_earnings_warning,
+        get_upcoming_earnings,
+    )
+    from notify import ScionNotifier
+    from performance_tracker import (
+        log_run_cycle,
+        log_screener_result,
+        snapshot_portfolio,
+    )
+
     print("\n" + "=" * 60)
     print("  OMAHA-BOT: FULL AUTOMATED REVIEW CYCLE")
     print(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -735,7 +777,7 @@ def cmd_run(args):
     print("=" * 60)
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description="Omaha-Bot: Warren Buffett Quality Compounder Agent")
     parser.add_argument("--notify", action="store_true", help="Send alerts via WhatsApp")
     parser.add_argument("--recipient", type=str, default=None, help="WhatsApp chat ID")
@@ -796,48 +838,58 @@ def main():
     debate_p.add_argument("symbol", type=str)
     debate_p.add_argument("--compile", action="store_true", help="Skip prepare, just compile from existing agent files")
 
-    args = parser.parse_args()
+    return parser
+
+
+def _result_code(result):
+    return result if isinstance(result, int) else 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.command == "screener":
-        cmd_screener(args)
+        return _result_code(cmd_screener(args))
     elif args.command == "analyze":
-        cmd_analyze(args)
+        return _result_code(cmd_analyze(args))
     elif args.command == "portfolio":
-        cmd_portfolio(args)
+        return _result_code(cmd_portfolio(args))
     elif args.command == "check":
-        cmd_check(args)
+        return _result_code(cmd_check(args))
     elif args.command == "add":
-        cmd_add(args)
+        return _result_code(cmd_add(args))
     elif args.command == "trim":
-        cmd_trim(args)
+        return _result_code(cmd_trim(args))
     elif args.command == "close":
-        cmd_close(args)
+        return _result_code(cmd_close(args))
     elif args.command == "news":
-        cmd_news(args)
+        return _result_code(cmd_news(args))
     elif args.command == "premarket":
-        cmd_premarket(args)
+        return _result_code(cmd_premarket(args))
     elif args.command == "combined":
-        cmd_combined(args)
+        return _result_code(cmd_combined(args))
     elif args.command == "run":
-        cmd_run(args)
+        return _result_code(cmd_run(args))
     elif args.command == "log-entry":
-        cmd_log_entry(args)
+        return _result_code(cmd_log_entry(args))
     elif args.command == "log-exit":
-        cmd_log_exit(args)
+        return _result_code(cmd_log_exit(args))
     elif args.command == "report":
-        cmd_report(args)
+        return _result_code(cmd_report(args))
     elif args.command == "feedback":
-        cmd_feedback(args)
+        return _result_code(cmd_feedback(args))
     elif args.command == "daily-check":
-        cmd_daily_check(args)
+        return _result_code(cmd_daily_check(args))
     elif args.command == "debate":
-        from debate import cmd_debate, cmd_prepare, cmd_compile
+        from debate import cmd_compile, cmd_debate, cmd_prepare
         if args.compile:
-            cmd_compile(args.symbol)
+            result = cmd_compile(args.symbol)
         else:
-            cmd_debate(args.symbol)
+            result = cmd_debate(args.symbol)
+        return _result_code(result)
     elif args.command == "tracker":
-        cmd_tracker(args)
+        return _result_code(cmd_tracker(args))
     else:
         parser.print_help()
         print("\nExample usage:")
@@ -859,7 +911,8 @@ def main():
         print("  python buffett_main.py daily-check          # Daily position monitor")
         print("  python buffett_main.py tracker              # Show open positions")
         print("  python buffett_main.py debate AAPL          # Bull/Bear/Judge debate on a ticker")
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

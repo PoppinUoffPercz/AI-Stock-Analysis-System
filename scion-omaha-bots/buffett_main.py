@@ -528,8 +528,9 @@ def cmd_combined(args):
     print("  COMBINED DUAL-AGENT PORTFOLIO VIEW")
     print("=" * 60)
 
-    omaha_file = os.path.join(os.path.dirname(__file__), "buffett_portfolio.json")
-    scion_file = os.path.join(os.path.dirname(__file__), "portfolio.json")
+    state_root = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
+    omaha_file = os.path.join(state_root, "buffett_portfolio.json")
+    scion_file = os.path.join(state_root, "portfolio.json")
 
     omaha_positions = {}
     scion_positions = {}

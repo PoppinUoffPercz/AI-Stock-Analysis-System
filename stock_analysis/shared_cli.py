@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from .cli import _load_legacy_module
+from .cli import _load_bot_package, _load_legacy_module
 
 
 def _result_code(result: object) -> int:
@@ -138,3 +138,32 @@ def debate_main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
     return _run_debate(args.symbol, args.compile)
+
+
+def _run_research(bot: str) -> int:
+    runner_name = f"{bot}_main"
+    try:
+        package = _load_bot_package()
+        runner = getattr(package, runner_name)
+    except (AttributeError, ImportError, ModuleNotFoundError) as exc:
+        print("Unable to load research CLI component.", file=__import__("sys").stderr)
+        if isinstance(exc, ModuleNotFoundError) and exc.name:
+            print(f"Missing dependency: {exc.name}", file=__import__("sys").stderr)
+        return 1
+    return _result_code(runner(["run"]))
+
+
+def research_main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="stock-analysis research",
+        description="Run one selected research bot.",
+    )
+    subparsers = parser.add_subparsers(dest="command")
+    run = subparsers.add_parser("run", help="Run one research bot cycle")
+    run.add_argument("--bot", choices=("scion", "omaha"), required=True)
+
+    args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 0
+    return _run_research(args.bot)

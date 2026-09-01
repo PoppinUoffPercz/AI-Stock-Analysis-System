@@ -132,6 +132,21 @@ def test_root_router_forwards_debate_arguments(monkeypatch) -> None:
     assert calls == [["AAPL", "--compile"]]
 
 
+def test_root_router_forwards_research_arguments(monkeypatch) -> None:
+    from stock_analysis import cli
+
+    calls = []
+
+    def runner(args: list[str]) -> int:
+        calls.append(args)
+        return 0
+
+    monkeypatch.setattr(cli, "_run_research", runner)
+
+    assert cli.main(["research", "run", "--bot", "omaha"]) == 0
+    assert calls == [["run", "--bot", "omaha"]]
+
+
 def test_root_router_without_namespace_prints_help(capsys) -> None:
     from stock_analysis import cli
 
@@ -166,7 +181,16 @@ def test_root_import_is_lazy() -> None:
 
 @pytest.mark.parametrize(
     "namespace",
-    ["scion", "omaha", "backtest", "portfolio", "tracking", "credit", "debate"],
+    [
+        "scion",
+        "omaha",
+        "backtest",
+        "portfolio",
+        "tracking",
+        "credit",
+        "debate",
+        "research",
+    ],
 )
 def test_namespace_help_is_available_offline(namespace: str) -> None:
     result = run_root(namespace, "--help")

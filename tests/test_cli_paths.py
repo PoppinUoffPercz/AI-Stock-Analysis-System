@@ -86,6 +86,39 @@ def test_integrated_backtest_writes_to_configured_output_root(tmp_path) -> None:
     assert payload["metadata"]["data_root"] == str(data_root)
 
 
+def test_combined_portfolio_reads_configured_state_root(tmp_path) -> None:
+    state_root = tmp_path / "state"
+    state_root.mkdir()
+    (state_root / "buffett_portfolio.json").write_text(
+        json.dumps({"capital": 123_000, "cash": 123_000, "positions": {}}),
+        encoding="utf-8",
+    )
+    (state_root / "portfolio.json").write_text(
+        json.dumps({"capital": 456_000, "cash": 456_000, "positions": {}}),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            PYTHON,
+            "-m",
+            "stock_analysis",
+            "--state-root",
+            str(state_root),
+            "portfolio",
+            "combined",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "$ 123,000" in result.stdout
+    assert "$ 456,000" in result.stdout
+
+
 def test_legacy_state_modules_read_configured_state_root(tmp_path) -> None:
     probe = """
 import os

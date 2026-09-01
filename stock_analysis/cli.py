@@ -12,7 +12,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BOT_ROOT = PROJECT_ROOT / "scion-omaha-bots"
 BOT_PACKAGE_SOURCE_ROOT = BOT_ROOT / "src"
 BACKTEST_SOURCE_ROOT = PROJECT_ROOT / "backtest-engine" / "src"
-NAMESPACES = {"scion", "omaha", "backtest", "portfolio", "tracking", "credit", "debate"}
+NAMESPACES = {
+    "scion",
+    "omaha",
+    "backtest",
+    "portfolio",
+    "tracking",
+    "credit",
+    "debate",
+    "research",
+}
 GLOBAL_PATH_OPTIONS = {"--state-root", "--data-root", "--outputs-root"}
 
 
@@ -46,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("tracking", "Run shared tracking commands"),
         ("credit", "Run credit-monitor commands"),
         ("debate", "Run Bull/Bear/Judge debate commands"),
+        ("research", "Run one selected research bot"),
     ):
         subparsers.add_parser(name, help=help_text)
 
@@ -167,6 +177,10 @@ def _run_debate(domain_args: list[str]) -> int:
     return _run_shared("debate_main", domain_args)
 
 
+def _run_research(domain_args: list[str]) -> int:
+    return _run_shared("research_main", domain_args)
+
+
 def _print_backtest_help() -> None:
     print("usage: stock-analysis backtest <command> [options]")
     print()
@@ -219,6 +233,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _result_code(_run_credit(domain_args))
         if namespace == "debate":
             return _result_code(_run_debate(domain_args))
+        if namespace == "research":
+            return _result_code(_run_research(domain_args))
         return _result_code(_run_backtest(domain_args))
 
     parser = build_parser()

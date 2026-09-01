@@ -1,0 +1,37 @@
+name: Integrated CLI Smoke
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  cli-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install the three CLI packages
+        run: |
+          python -m pip install -e backtest-engine
+          python -m pip install -e scion-omaha-bots
+          python -m pip install -e .
+      - name: Check offline help
+        run: |
+          python -m stock_analysis --help
+          python -m stock_analysis scion --help
+          python -m stock_analysis omaha --help
+          python -m stock_analysis backtest --help
+      - name: Run deterministic synthetic backtest
+        run: >-
+          python -m stock_analysis
+          --outputs-root "$RUNNER_TEMP/stock-analysis-outputs"
+          backtest discover
+          --strategy sma_cross
+          --synthetic
+          --days 200
+          --seed 42
+          --cost zero

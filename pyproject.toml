@@ -21,3 +21,6 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["stock_analysis"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "scion-omaha-bots"]

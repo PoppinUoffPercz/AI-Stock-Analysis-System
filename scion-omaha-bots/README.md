@@ -7,6 +7,21 @@ A Python-based paper trading system running two autonomous agents inspired by co
 | **Scion-Bot** | Michael Burry | Swing-trading beaten-down "ick" stocks | Days to weeks |
 | **Omaha-Bot** | Warren Buffett | Long-term quality compounding | Years to decades |
 
+## Integrated CLI
+
+From the repository root, use the canonical command:
+
+```powershell
+stock-analysis scion --watchlist LULU,PFE screener
+stock-analysis omaha --watchlist KO,PG run
+stock-analysis portfolio combined
+stock-analysis research run --bot scion
+```
+
+Install this package with `python -m pip install -e scion-omaha-bots`.
+The historical `python main.py` and `python buffett_main.py` commands remain
+supported when run from this directory.
+
 ## Architecture
 
 ```

@@ -5,7 +5,11 @@ This repository is assembled from the live source projects and model-facing fram
 ## Inclusion Policy
 
 - `scion-omaha-bots/`: executable Python source, tests, requirements, and portable launchers from the local Scion-Bot source project.
+- `scion-omaha-bots/src/scion_omaha_bots/`: stable package boundary for the Scion and Omaha runners; legacy flat modules remain compatibility sources during migration.
 - `backtest-engine/`: source, tests, notebooks, strategies, CI/configuration, and hypotheses from the local backtesting-engine source project.
+- `stock_analysis/`: thin repository-level CLI router and path configuration.
+- `tests/`: offline integrated CLI contract, router, path, packaging, and workflow tests.
+- `.github/workflows/stock-analysis-cli.yml`: offline integrated CLI smoke workflow.
 - `frameworks/`: agent definitions and research framework notes from the bot project and Obsidian vault.
 - `docs/architecture/`: directly related system guides and backtesting design notes from the Obsidian vault.
 

@@ -36,6 +36,22 @@ Everything you built, what it does, and how to use it. One document to rule them
 
 Two Python paper-trading agents share the codebase at `./scion-omaha-bots\`. They see different parts of the market and balance each other.
 
+The canonical command is `stock-analysis`. Install `backtest-engine`,
+`scion-omaha-bots`, and the root package in editable mode, then use explicit
+namespaces. For example:
+
+```text
+stock-analysis scion --watchlist LULU,PFE screener
+stock-analysis omaha --watchlist KO,PG run
+stock-analysis portfolio combined
+stock-analysis tracking report
+stock-analysis backtest discover --strategy sma_cross --synthetic --days 200 --seed 42 --cost zero
+```
+
+`python main.py`, `python buffett_main.py`, and `bte` remain compatibility
+commands. The integrated CLI does not automatically connect live research to
+backtesting or trading.
+
 | Agent | Persona | Strategy | Horizon | Portfolio Share |
 | :--- | :--- | :--- | :--- | :--- |
 | **Scion-Bot** (`main.py`) | Michael Burry | Swing-trade beaten-down "ick" stocks near 52W lows | Days to weeks | 30-40% |

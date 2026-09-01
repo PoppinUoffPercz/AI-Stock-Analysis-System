@@ -8,7 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_bot_package_imports_from_an_unrelated_directory_without_market_imports(tmp_path) -> None:
+def test_bot_package_imports_from_an_unrelated_directory_without_market_imports(
+    tmp_path,
+) -> None:
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
     result = subprocess.run(

@@ -8,6 +8,30 @@ tags:
 
 # CLI Reference
 
+## Canonical command
+
+Use `stock-analysis` from the repository root:
+
+```text
+stock-analysis --help
+stock-analysis scion --watchlist LULU,PFE screener
+stock-analysis omaha --watchlist KO,PG run
+stock-analysis backtest discover --strategy sma_cross --synthetic --days 200 --seed 42 --cost zero
+stock-analysis portfolio combined
+stock-analysis tracking report
+stock-analysis credit status
+stock-analysis debate AAPL --compile
+```
+
+Root path options come before the namespace:
+
+```text
+stock-analysis --state-root PATH --data-root PATH --outputs-root PATH backtest discover ...
+```
+
+The commands below document the preserved compatibility scripts. They keep the
+same bot behavior but should be run from `scion-omaha-bots`.
+
 ## Scion-Bot (`python main.py`)
 
 | Command | Description |

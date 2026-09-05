@@ -10,6 +10,15 @@ tags:
 
 Two Python agents sharing the same codebase at `./scion-omaha-bots\`, designed to complement each other.
 
+The canonical entry point is `stock-analysis`. The historical bot scripts remain
+compatibility entry points.
+
+```text
+stock-analysis scion --watchlist LULU,PFE screener
+stock-analysis omaha --watchlist KO,PG run
+stock-analysis portfolio combined
+```
+
 ## Architecture Philosophy
 
 ```
@@ -57,10 +66,11 @@ They see different opportunities and balance each other:
 
 Cash is a strategic asset. Combined view via:
 ```
-python buffett_main.py combined
+stock-analysis portfolio combined
 ```
 
 This reads both `buffett_portfolio.json` and `portfolio.json` and shows the unified allocation.
+Use `python buffett_main.py combined` as the compatibility form.
 
 ## Commissioning Note
 

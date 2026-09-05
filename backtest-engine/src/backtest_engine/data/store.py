@@ -14,6 +14,8 @@ from typing import Final
 
 import pandas as pd
 
+from backtest_engine.identifiers import validate_identifier
+
 # Canonical clean schema (plan section 4.2)
 CLEAN_COLUMNS: Final[tuple[str, ...]] = (
     "timestamp",
@@ -37,7 +39,8 @@ TIMESTAMP_TZ = "UTC"
 
 def clean_path(root: Path, symbol: str, year: int) -> Path:
     """Return the canonical parquet path for a symbol-year partition."""
-    return Path(root) / symbol.upper() / f"{year}.parquet"
+    safe_symbol = validate_identifier(symbol, field_name="symbol").upper()
+    return Path(root) / safe_symbol / f"{year}.parquet"
 
 
 def write_clean(
@@ -89,7 +92,8 @@ def read_clean(
 
     `start` / `end` are inclusive date strings ('YYYY-MM-DD'); either may be None.
     """
-    sym_dir = Path(root) / symbol.upper()
+    safe_symbol = validate_identifier(symbol, field_name="symbol").upper()
+    sym_dir = Path(root) / safe_symbol
     if not sym_dir.is_dir():
         return pd.DataFrame(columns=CLEAN_COLUMNS)
 

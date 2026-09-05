@@ -5,19 +5,23 @@ Tracks every entry + exit, snapshots open positions daily,
 and persists to CSV for analysis by report_card.py and feedback.py.
 """
 import csv
-import os
 import datetime
 import json
-import yfinance as yf
+import os
 import sys
+
+import yfinance as yf
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from reflection import ReflectionLog, log_reflection_on_exit
+from reflection import ReflectionLog
 
-TRADES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.csv")
-DAILY_PNL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_pnl.csv")
-OPEN_POSITIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "open_positions.json")
+STATE_ROOT = os.environ.get(
+    "STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(os.path.abspath(__file__))
+)
+TRADES_FILE = os.path.join(STATE_ROOT, "trades.csv")
+DAILY_PNL_FILE = os.path.join(STATE_ROOT, "daily_pnl.csv")
+OPEN_POSITIONS_FILE = os.path.join(STATE_ROOT, "open_positions.json")
 
 TRADES_HEADERS = [
     "ticker", "bot", "entry_date", "exit_date", "entry_price", "exit_price",
@@ -35,6 +39,7 @@ DAILY_HEADERS = [
 def _ensure_file(path, headers):
     if not os.path.exists(path):
         try:
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
             with open(path, "w", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
                 w.writerow(headers)
@@ -138,6 +143,7 @@ class Tracker:
         return {}
 
     def save_open_positions(self, positions):
+        os.makedirs(os.path.dirname(os.path.abspath(self.positions_file)), exist_ok=True)
         with open(self.positions_file, "w") as f:
             json.dump(positions, f, indent=2)
 

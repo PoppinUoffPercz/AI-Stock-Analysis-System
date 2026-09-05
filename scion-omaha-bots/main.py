@@ -17,22 +17,14 @@ Usage:
   python main.py run               # Full automated cycle: screen -> analyze top -> check -> news -> alert
   python main.py add PFE           # Manually add a position to the portfolio
 """
-import sys
-import os
-import datetime
 import argparse
+import datetime
+import os
+import sys
+from collections.abc import Sequence
 
 # Ensure local imports work regardless of CWD
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from screener import ScionScreener
-from analyzer import ScionAnalyzer
-from news_engine import NewsEngine
-from portfolio import ScionPortfolioManager
-from notify import ScionNotifier, format_screener_alert, format_portfolio_alert
-from performance_tracker import log_screener_result, log_run_cycle, log_portfolio_action, snapshot_portfolio
-from earnings import get_upcoming_earnings, format_earnings_brief, format_earnings_warning
-
 
 DEFAULT_WATCHLIST = [
     "EL", "LULU", "MELI", "REGN", "MOH",
@@ -44,6 +36,9 @@ DEFAULT_WATCHLIST = [
 
 def cmd_screener(args):
     """Run the screener on the default or custom watchlist."""
+    from notify import ScionNotifier, format_screener_alert
+    from screener import ScionScreener
+
     watchlist = args.watchlist.split(",") if args.watchlist else None
     if watchlist:
         watchlist = [t.strip().upper() for t in watchlist]
@@ -69,7 +64,7 @@ def cmd_screener(args):
     display_cols = ["Symbol", "Price", "Dist from Low", "Current Ratio",
                     "Debt/Equity", "FCF Yield", "Sentiment", "Scion Score"]
     print(results[display_cols].to_string(index=False))
-    print(f"\nFull report saved to: screener_output.md")
+    print("\nFull report saved to: screener_output.md")
 
     # Send WhatsApp alert if enabled
     if args.notify:
@@ -86,6 +81,9 @@ def cmd_screener(args):
 
 def cmd_analyze(args):
     """Run the deep-dive analyzer on a specific ticker."""
+    from analyzer import ScionAnalyzer
+    from notify import ScionNotifier
+
     analyzer = ScionAnalyzer(args.symbol)
     report = analyzer.generate_full_report()
 
@@ -99,6 +97,9 @@ def cmd_analyze(args):
 
 def cmd_news(args):
     """Scan the watchlist for new news catalysts."""
+    from news_engine import NewsEngine
+    from notify import ScionNotifier
+
     watchlist = args.watchlist.split(",") if args.watchlist else DEFAULT_WATCHLIST
     watchlist = [t.strip().upper() for t in watchlist]
 
@@ -118,6 +119,9 @@ def cmd_news(args):
 
 def cmd_portfolio(args):
     """Display portfolio summary."""
+    from notify import ScionNotifier
+    from portfolio import ScionPortfolioManager
+
     pm = ScionPortfolioManager()
     summary = pm.get_portfolio_summary()
     print(summary)
@@ -129,6 +133,9 @@ def cmd_portfolio(args):
 
 def cmd_check(args):
     """Check all open positions for stop-loss and target triggers."""
+    from notify import ScionNotifier
+    from portfolio import ScionPortfolioManager
+
     pm = ScionPortfolioManager()
     print("\n[Portfolio] Checking all open positions for action triggers...")
     actions = pm.check_all_positions()
@@ -157,6 +164,9 @@ def cmd_check(args):
 
 def cmd_add(args):
     """Manually add a position to the portfolio."""
+    from notify import ScionNotifier
+    from portfolio import ScionPortfolioManager
+
     pm = ScionPortfolioManager()
 
     # Try to get technical levels from yfinance
@@ -200,6 +210,24 @@ def cmd_run(args):
       4. Scan news on watchlist
       5. Send consolidated WhatsApp alert
     """
+    import yfinance as yf
+    from analyzer import ScionAnalyzer
+    from earnings import (
+        format_earnings_brief,
+        format_earnings_warning,
+        get_upcoming_earnings,
+    )
+    from news_engine import NewsEngine
+    from notify import ScionNotifier
+    from performance_tracker import (
+        log_portfolio_action,
+        log_run_cycle,
+        log_screener_result,
+        snapshot_portfolio,
+    )
+    from portfolio import ScionPortfolioManager
+    from screener import ScionScreener
+
     print("\n" + "=" * 60)
     print("  SCION-BOT: FULL AUTOMATED CYCLE")
     print(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -331,6 +359,11 @@ def cmd_run(args):
 
 def cmd_premarket(args):
     """Generate a pre-market briefing for Scion-Bot swing trading."""
+    from earnings import format_earnings_brief, get_upcoming_earnings
+    from news_engine import NewsEngine
+    from notify import ScionNotifier
+    from screener import ScionScreener
+
     print("\n" + "=" * 60)
     print("  SCION-BOT: PRE-MARKET BRIEFING")
     print(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -436,7 +469,7 @@ def cmd_premarket(args):
         pd.set_option("display.width", 1200)
         display_cols = ["Symbol", "Price", "Dist from Low", "Current Ratio", "Debt/Equity", "FCF Yield", "Sentiment", "Scion Score"]
         print(top5[display_cols].to_string(index=False))
-        print(f"\n  Full screener: python main.py screener")
+        print("\n  Full screener: python main.py screener")
     else:
         print("  No swing candidates above 25-point threshold.")
 
@@ -510,7 +543,7 @@ def cmd_tracker(args):
         print(f"  {p['ticker']:<8} {p['bot']:<8} ${p['entry_price']:<6.2f} ${p['current_price']:<7.2f} {p['pnl_pct']:+.2f}% {p['days_held']:>4}d {sd:>9} {td:>8} {p['score']:>5}")
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description="Scion-Bot: Michael Burry Swing Trading Agent")
     parser.add_argument("--notify", action="store_true", help="Send alerts via WhatsApp")
     parser.add_argument("--recipient", type=str, default=None, help="WhatsApp chat ID")
@@ -561,42 +594,52 @@ def main():
     debate_p.add_argument("symbol", type=str)
     debate_p.add_argument("--compile", action="store_true", help="Skip prepare, just compile from existing agent files")
 
-    args = parser.parse_args()
+    return parser
+
+
+def _result_code(result):
+    return result if isinstance(result, int) else 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.command == "screener":
-        cmd_screener(args)
+        return _result_code(cmd_screener(args))
     elif args.command == "analyze":
-        cmd_analyze(args)
+        return _result_code(cmd_analyze(args))
     elif args.command == "news":
-        cmd_news(args)
+        return _result_code(cmd_news(args))
     elif args.command == "portfolio":
-        cmd_portfolio(args)
+        return _result_code(cmd_portfolio(args))
     elif args.command == "check":
-        cmd_check(args)
+        return _result_code(cmd_check(args))
     elif args.command == "add":
-        cmd_add(args)
+        return _result_code(cmd_add(args))
     elif args.command == "premarket":
-        cmd_premarket(args)
+        return _result_code(cmd_premarket(args))
     elif args.command == "run":
-        cmd_run(args)
+        return _result_code(cmd_run(args))
     elif args.command == "log-entry":
-        cmd_log_entry(args)
+        return _result_code(cmd_log_entry(args))
     elif args.command == "log-exit":
-        cmd_log_exit(args)
+        return _result_code(cmd_log_exit(args))
     elif args.command == "report":
-        cmd_report(args)
+        return _result_code(cmd_report(args))
     elif args.command == "feedback":
-        cmd_feedback(args)
+        return _result_code(cmd_feedback(args))
     elif args.command == "daily-check":
-        cmd_daily_check(args)
+        return _result_code(cmd_daily_check(args))
     elif args.command == "debate":
-        from debate import cmd_debate, cmd_prepare, cmd_compile
+        from debate import cmd_compile, cmd_debate
         if args.compile:
-            cmd_compile(args.symbol)
+            result = cmd_compile(args.symbol)
         else:
-            cmd_debate(args.symbol)
+            result = cmd_debate(args.symbol)
+        return _result_code(result)
     elif args.command == "tracker":
-        cmd_tracker(args)
+        return _result_code(cmd_tracker(args))
     else:
         parser.print_help()
         print("\nExample usage:")
@@ -615,7 +658,8 @@ def main():
         print("  python main.py daily-check         # Daily position monitor")
         print("  python main.py tracker             # Show open positions")
         print("  python main.py debate AAPL         # Bull/Bear/Judge debate on a ticker")
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

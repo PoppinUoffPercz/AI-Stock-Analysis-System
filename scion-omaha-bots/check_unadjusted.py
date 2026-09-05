@@ -3,7 +3,9 @@
 Separates dividend-adjustment noise (small offsets, real fills) from
 genuinely misdated entries (fill price never traded on the logged date).
 """
-import csv, sys
+import csv
+import sys
+
 import yfinance as yf
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

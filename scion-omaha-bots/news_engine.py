@@ -9,16 +9,12 @@ sentiment shifts. Designed to detect:
 
 Integrates with the screener and analyzer modules.
 """
-import yfinance as yf
 import datetime
 import json
 import os
-import asyncio
-import subprocess
-import sys
 
+import yfinance as yf
 from news_utils import extract_news_fields
-
 
 # Burry's "ick" and reversal keyword dictionaries
 ICK_KEYWORDS = [
@@ -51,7 +47,8 @@ class NewsEngine:
     def __init__(self, watchlist=None):
         self.watchlist = watchlist or []
         self.seen_titles = {}  # symbol -> set of seen titles (for dedup)
-        self._state_file = os.path.join(os.path.dirname(__file__), "news_state.json")
+        state_root = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
+        self._state_file = os.path.join(state_root, "news_state.json")
         self.load_seen_state()
 
     def load_seen_state(self):
@@ -68,6 +65,7 @@ class NewsEngine:
     def save_seen_state(self):
         # Convert sets to lists for JSON serialization
         serializable = {k: list(v) for k, v in self.seen_titles.items()}
+        os.makedirs(os.path.dirname(os.path.abspath(self._state_file)), exist_ok=True)
         with open(self._state_file, "w") as f:
             json.dump(serializable, f, indent=2)
 
@@ -194,7 +192,7 @@ class NewsEngine:
             for item in scan_results["thesis_breaking"]:
                 lines.append(f"  [{item['symbol']}] {item['title']}")
                 lines.append(f"    Source: {item['publisher']}")
-                lines.append(f"    -> Consider immediate stop-loss review")
+                lines.append("    -> Consider immediate stop-loss review")
             lines.append("")
 
         if scan_results["extreme_panic"]:
@@ -202,7 +200,7 @@ class NewsEngine:
             for item in scan_results["extreme_panic"]:
                 lines.append(f"  [{item['symbol']}] {item['title']}")
                 lines.append(f"    Source: {item['publisher']}")
-                lines.append(f"    -> If price holds support, this may be a capitulation buy")
+                lines.append("    -> If price holds support, this may be a capitulation buy")
             lines.append("")
 
         if scan_results["reversal_catalyst"]:
@@ -210,7 +208,7 @@ class NewsEngine:
             for item in scan_results["reversal_catalyst"]:
                 lines.append(f"  [{item['symbol']}] {item['title']}")
                 lines.append(f"    Source: {item['publisher']}")
-                lines.append(f"    -> Positive inflection in depressed stock")
+                lines.append("    -> Positive inflection in depressed stock")
             lines.append("")
 
         return "\n".join(lines)

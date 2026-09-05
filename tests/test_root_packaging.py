@@ -1,0 +1,12 @@
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_root_package_declares_stock_analysis_console_script() -> None:
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert metadata["project"]["scripts"]["stock-analysis"] == "stock_analysis.cli:main"

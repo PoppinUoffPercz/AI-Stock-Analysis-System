@@ -10,6 +10,14 @@ tags:
 
 # Backtest Engine — How to Test & Hypothesize Strategies
 
+The engine is available as `bte` and through the repository-level
+`stock-analysis backtest` namespace. The integrated form routes directly to the
+same Python CLI and accepts the same backtest arguments.
+
+```text
+stock-analysis backtest discover --strategy sma_cross --synthetic --days 200 --seed 42 --cost zero
+```
+
 > Three-phase framework in `./backtest-engine`: Phase 1 discovery (VectorBT) → Phase 2 validation (Backtrader event-driven, realistic fills/slippage) → optional Phase 3 daily-bar replay (NautilusTrader). All open-source, no paid data.
 
 See 12-Backtest-Engine for full design; this is the practical workflow guide.

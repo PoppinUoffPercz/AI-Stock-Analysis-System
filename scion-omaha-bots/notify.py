@@ -11,13 +11,14 @@ Usage:
 The bridge communicates with the zappy-mcp WebSocket MCP server to send messages.
 It uses the MCP stdio protocol by spawning the zappy-mcp node process.
 """
+import asyncio
 import json
 import os
 import subprocess
 import sys
-import asyncio
-import websockets
+from datetime import datetime, timezone
 
+import websockets
 
 ZAPPY_MCP_PATH = os.environ.get(
     "ZAPPY_MCP_PATH",
@@ -29,6 +30,11 @@ ZAPPY_CONFIG_PATH = os.environ.get(
 )
 # Alternatively, talk to the MCP HTTP bridge if zappy-mcp is already running
 MCP_HTTP_PORT = int(os.environ.get("MCP_HTTP_PORT", "0"))
+
+
+def _format_generated_date(value):
+    """Format a local timestamp like the former Windows `date /t` output."""
+    return value.strftime("%m/%d/%Y")
 
 
 class ScionNotifier:
@@ -178,7 +184,7 @@ def format_screener_alert(results_df, top_n=5):
 
     lines = []
     lines.append("TOP SCION SCREENER CANDIDATES")
-    lines.append(f"Generated: {os.popen('date /t').read().strip()}\n")
+    lines.append(f"Generated: {_format_generated_date(datetime.now(timezone.utc).astimezone())}\n")
 
     for _, row in results_df.head(top_n).iterrows():
         lines.append(f"[{row['Symbol']}] Score: {row['Scion Score']}/100")

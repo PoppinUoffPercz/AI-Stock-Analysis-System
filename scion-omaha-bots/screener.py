@@ -1,17 +1,21 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
+import csv
 import datetime
 import os
-import csv
-import re
-import sys
 
-from ta_lib import compute_rsi, compute_macd, compute_smas, compute_volume_ratio, compute_ttm_squeeze, compute_atr
-from smart_money import get_smart_money_score
-from reflection import ReflectionLog
 import entry_timing
+import pandas as pd
+import yfinance as yf
 from news_utils import extract_news_fields
+from reflection import ReflectionLog
+from smart_money import get_smart_money_score
+from ta_lib import (
+    compute_atr,
+    compute_macd,
+    compute_rsi,
+    compute_smas,
+    compute_ttm_squeeze,
+    compute_volume_ratio,
+)
 
 
 def _discovery_tickers(limit=80, lists=("losers", "undervalued_large_caps")):
@@ -385,7 +389,7 @@ class ScionScreener:
                     print(f"  -> {symbol} scored {scion_score}/100 (below 25 threshold, skipping)")
 
             except Exception as e:
-                print(f"Error screening {symbol}: {str(e)}")
+                print(f"Error screening {symbol}: {e!s}")
 
         # Convert results to DataFrame and sort by Scion Score
         df = pd.DataFrame(self.results)

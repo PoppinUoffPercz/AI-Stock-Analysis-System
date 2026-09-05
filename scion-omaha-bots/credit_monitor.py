@@ -16,10 +16,9 @@ import datetime
 import json
 import os
 import re
-import sys
 import urllib.request
-import yfinance as yf
 
+import yfinance as yf
 
 # --- Bond ETF tickers ---
 TREASURY_TICKERS = {
@@ -123,7 +122,9 @@ class CreditMonitor:
     """
 
     def __init__(self, data_dir=None):
-        self.data_dir = data_dir or os.path.dirname(os.path.abspath(__file__))
+        self.data_dir = data_dir or os.environ.get(
+            "STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(os.path.abspath(__file__))
+        )
         self.state_file = os.path.join(self.data_dir, "credit_state.json")
         self.vault_base = os.path.expanduser(
             "~/OneDrive/Documents/Obsidian Vault/Stock Research/Credit Monitor"
@@ -150,6 +151,7 @@ class CreditMonitor:
 
     def _save_state(self):
         try:
+            os.makedirs(os.path.dirname(os.path.abspath(self.state_file)), exist_ok=True)
             with open(self.state_file, "w") as f:
                 json.dump(self.state, f, indent=2)
         except Exception as e:
@@ -569,7 +571,7 @@ class CreditMonitor:
 
         lines = []
         lines.append("=" * 60)
-        lines.append(f"  CREDIT MARKET MONITOR")
+        lines.append("  CREDIT MARKET MONITOR")
         lines.append(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")

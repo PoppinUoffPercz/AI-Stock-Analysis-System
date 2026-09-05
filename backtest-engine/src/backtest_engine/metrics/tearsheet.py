@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from backtest_engine.experiment_index import ExperimentIndex
+from backtest_engine.identifiers import validate_identifier
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
 from backtest_engine.strategy.persistence import persist_result
 
@@ -57,6 +58,7 @@ def render_report(
     Returns:
       ReportResult with paths + the bias-audit panel + metrics dict.
     """
+    run_id = validate_identifier(cfg.run_id, field_name="run_id")
     metrics = {
         key: value if np.isfinite(value) else 0.0
         for key, value in attach_metric_panel(result).items()
@@ -75,7 +77,7 @@ def render_report(
     flags = bias_audit(metrics)
     result.metrics = metrics
 
-    out_dir = Path(cfg.outputs_dir) / cfg.run_id
+    out_dir = Path(cfg.outputs_dir) / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     persist_result(result, out_dir, metrics=metrics)
 
@@ -116,9 +118,9 @@ def render_report(
     # --- Compose final HTML ---------------------------------------------------
     html_path = out_dir / "report.html"
     body = f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Backtest Report - {cfg.run_id}</title></head>
+<html><head><meta charset="utf-8"><title>Backtest Report - {run_id}</title></head>
 <body>
-<h1>Backtest Report - {cfg.run_id}</h1>
+<h1>Backtest Report - {run_id}</h1>
 <h2>Metrics</h2>
 <pre>{json.dumps({k: float(v) if isinstance(v, (int, float, np.floating)) else str(v) for k, v in metrics.items()}, indent=2)}</pre>
 <h2>Benchmark</h2>
@@ -150,16 +152,16 @@ def render_report(
     ExperimentIndex(Path(cfg.outputs_dir) / "experiments.jsonl").append(
         manifest,
         artifacts={
-            "manifest": f"{cfg.run_id}/manifest.json",
-            "metrics": f"{cfg.run_id}/metrics.json",
-            "report": f"{cfg.run_id}/report.html",
-            "result": f"{cfg.run_id}/result.json",
+            "manifest": f"{run_id}/manifest.json",
+            "metrics": f"{run_id}/metrics.json",
+            "report": f"{run_id}/report.html",
+            "result": f"{run_id}/result.json",
         },
         benchmark=benchmark or None,
     )
 
     return ReportResult(
-        run_id=cfg.run_id,
+        run_id=run_id,
         out_dir=out_dir,
         html_path=html_path,
         metrics=metrics,
@@ -190,6 +192,6 @@ def _bias_flags_figure(flags: dict):
 
 def make_report_config(*, run_id: str, outputs_dir: Path | str) -> ReportConfig:
     return ReportConfig(
-        run_id=run_id,
+        run_id=validate_identifier(run_id, field_name="run_id"),
         outputs_dir=Path(outputs_dir),
     )

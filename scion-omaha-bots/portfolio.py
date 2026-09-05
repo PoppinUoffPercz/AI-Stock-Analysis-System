@@ -1,10 +1,12 @@
+import datetime
 import json
 import os
-import datetime
-import yfinance as yf
-from ta_lib import compute_rsi, compute_atr, compute_sma
 
-PORTFOLIO_FILE = os.path.join(os.path.dirname(__file__), "portfolio.json")
+import yfinance as yf
+from ta_lib import compute_atr, compute_rsi, compute_sma
+
+STATE_ROOT = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
+PORTFOLIO_FILE = os.path.join(STATE_ROOT, "portfolio.json")
 
 class ScionPortfolioManager:
     """
@@ -51,6 +53,7 @@ class ScionPortfolioManager:
             self.thesis_break_cap_pct = data.get("thesis_break_cap_pct", self.thesis_break_cap_pct)
 
     def save_state(self):
+        os.makedirs(os.path.dirname(os.path.abspath(self.portfolio_file)), exist_ok=True)
         data = {
             "capital": self.capital,
             "cash": self.cash,

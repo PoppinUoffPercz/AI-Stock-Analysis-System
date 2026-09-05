@@ -9,13 +9,12 @@ Detects:
   4. Industry disruption (tech shifts, regulatory action)
   5. Thesis-breaking events (fraud, antitrust, delisting)
 """
-import yfinance as yf
 import datetime
 import json
 import os
 
+import yfinance as yf
 from news_utils import extract_news_fields
-
 
 # Buffett-relevant keyword categories
 MOAT_THREAT_KEYWORDS = [
@@ -63,7 +62,8 @@ class BuffettNewsEngine:
     def __init__(self, watchlist=None):
         self.watchlist = watchlist or []
         self.seen_titles = {}
-        self._state_file = os.path.join(os.path.dirname(__file__), "buffett_news_state.json")
+        state_root = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
+        self._state_file = os.path.join(state_root, "buffett_news_state.json")
         self.load_seen_state()
 
     def load_seen_state(self):
@@ -78,6 +78,7 @@ class BuffettNewsEngine:
 
     def save_seen_state(self):
         serializable = {k: list(v) for k, v in self.seen_titles.items()}
+        os.makedirs(os.path.dirname(os.path.abspath(self._state_file)), exist_ok=True)
         with open(self._state_file, "w") as f:
             json.dump(serializable, f, indent=2)
 

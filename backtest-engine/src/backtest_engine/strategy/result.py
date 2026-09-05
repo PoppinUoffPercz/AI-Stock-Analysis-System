@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 import numpy as np
 import pandas as pd
 
+from backtest_engine.identifiers import validate_identifier
+
 
 @dataclass
 class TradeRecord:
@@ -70,7 +72,8 @@ def validate_backtest_result(result: BacktestResult) -> BacktestResult:
     if not isinstance(result, BacktestResult):
         raise ValueError("result must be a BacktestResult")
 
-    for field_name in ("run_id", "strategy_name", "engine", "cost_model", "universe_ref"):
+    validate_identifier(result.run_id, field_name="run_id")
+    for field_name in ("strategy_name", "engine", "cost_model", "universe_ref"):
         value = getattr(result, field_name)
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{field_name} must be a nonempty string")

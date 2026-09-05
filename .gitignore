@@ -9,6 +9,7 @@ __pycache__/
 .ruff_cache/
 .hypothesis/
 .superpowers/
+.worktrees/
 .pytest-tmp-*/
 .pytest-task*/
 .coverage

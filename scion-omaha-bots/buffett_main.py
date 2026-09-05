@@ -18,21 +18,13 @@ Usage:
   python buffett_main.py run                 # Full automated review cycle
 """
 
-import sys
-import os
-import datetime
 import argparse
+import datetime
+import os
+import sys
+from collections.abc import Sequence
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from buffett_screener import BuffettScreener
-from buffett_analyzer import BuffettAnalyzer
-from buffett_portfolio import BuffettPortfolioManager
-from buffett_news_engine import BuffettNewsEngine
-from notify import ScionNotifier
-from performance_tracker import log_screener_result, log_run_cycle, log_portfolio_action, snapshot_portfolio
-from earnings import get_upcoming_earnings, format_earnings_brief, format_earnings_warning
-
 
 DEFAULT_WATCHLIST = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BRK-B", "JPM", "V", "MA",
@@ -44,6 +36,9 @@ DEFAULT_WATCHLIST = [
 
 def cmd_screener(args):
     """Run the Buffett quality compounder screener."""
+    from buffett_screener import BuffettScreener
+    from notify import ScionNotifier
+
     watchlist = args.watchlist.split(",") if args.watchlist else None
     if watchlist:
         watchlist = [t.strip().upper() for t in watchlist]
@@ -68,7 +63,7 @@ def cmd_screener(args):
     pd.set_option("display.width", 1200)
     display_cols = ["Symbol", "Price", "ROE", "Gross Margin", "D/E", "FCF Yield", "P/E", "PEG", "Buffett Score"]
     print(results[display_cols].to_string(index=False))
-    print(f"\nFull report saved to: buffett_screener_output.md")
+    print("\nFull report saved to: buffett_screener_output.md")
 
     if args.notify:
         notifier = ScionNotifier(recipient_id=args.recipient)
@@ -85,6 +80,9 @@ def cmd_screener(args):
 
 def cmd_analyze(args):
     """Run the Four Filters deep-dive analysis."""
+    from buffett_analyzer import BuffettAnalyzer
+    from notify import ScionNotifier
+
     analyzer = BuffettAnalyzer(args.symbol)
     report = analyzer.generate_full_report()
 
@@ -98,6 +96,9 @@ def cmd_analyze(args):
 
 def cmd_portfolio(args):
     """Display portfolio summary."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     summary = pm.get_portfolio_summary()
     print(summary)
@@ -109,6 +110,9 @@ def cmd_portfolio(args):
 
 def cmd_check(args):
     """Review all positions — intrinsic value checks, no stop-losses."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     print("\n[Portfolio] Reviewing all holdings (Buffett-style)...")
     actions = pm.check_all_positions()
@@ -138,6 +142,9 @@ def cmd_check(args):
 
 def cmd_add(args):
     """Manually add a long-term compounder position."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
 
     import yfinance as yf
@@ -194,6 +201,9 @@ def cmd_add(args):
 
 def cmd_trim(args):
     """Trim an overweight position (rebalance, not exit)."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     if args.symbol not in pm.positions:
         print(f"{args.symbol} is not in the portfolio.")
@@ -217,6 +227,9 @@ def cmd_trim(args):
 
 def cmd_close(args):
     """Close a position (thesis break or strategic exit)."""
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     pm = BuffettPortfolioManager()
     if args.symbol not in pm.positions:
         print(f"{args.symbol} is not in the portfolio.")
@@ -224,7 +237,7 @@ def cmd_close(args):
 
     price = pm.get_current_price(args.symbol)
     if not price:
-        print(f"Could not get current price. Using last known entry.")
+        print("Could not get current price. Using last known entry.")
         price = pm.positions[args.symbol]["entry_price"]
 
     reason = args.reason or "Thesis review — exit requested"
@@ -240,6 +253,9 @@ def cmd_close(args):
 
 def cmd_news(args):
     """Scan the Buffett watchlist for moat-threatening news."""
+    from buffett_news_engine import BuffettNewsEngine
+    from notify import ScionNotifier
+
     watchlist = args.watchlist.split(",") if args.watchlist else DEFAULT_WATCHLIST
     watchlist = [t.strip().upper() for t in watchlist]
 
@@ -323,6 +339,10 @@ def _fmt_val(val, style="float"):
 
 def cmd_premarket(args):
     """Generate a pre-market briefing and watchlist for today's open."""
+    from buffett_news_engine import BuffettNewsEngine
+    from buffett_screener import BuffettScreener
+    from earnings import format_earnings_brief, get_upcoming_earnings
+
     print("\n" + "=" * 60)
     print("  OMAHA-BOT: PRE-MARKET BRIEFING")
     print(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -426,7 +446,7 @@ def cmd_premarket(args):
         pd.set_option("display.width", 1200)
         display_cols = ["Symbol", "Price", "ROE", "Gross Margin", "FCF Yield", "P/E", "PEG", "Buffett Score"]
         print(top5[display_cols].to_string(index=False))
-        print(f"\n  Full screener: python buffett_main.py screener")
+        print("\n  Full screener: python buffett_main.py screener")
     else:
         print("  No quality compounders above 40-point threshold.")
 
@@ -444,18 +464,18 @@ def cmd_premarket(args):
     try:
         os.makedirs(os.path.dirname(report_path), exist_ok=True)
         lines = [
-            f"---",
+            "---",
             f"title: \"Pre-Market Brief — {datetime.datetime.now().strftime('%Y-%m-%d')}\"",
             f"date: {datetime.datetime.now().strftime('%Y-%m-%d')}",
-            f"tags:",
-            f"  - premarket",
-            f"  - daily-brief",
-            f"---",
-            f"",
+            "tags:",
+            "  - premarket",
+            "  - daily-brief",
+            "---",
+            "",
             f"# Pre-Market Brief — {datetime.datetime.now().strftime('%Y-%m-%d')}",
-            f"",
-            f"*Auto-generated by Omaha-Bot*",
-            f"",
+            "",
+            "*Auto-generated by Omaha-Bot*",
+            "",
         ]
         with open(report_path, "w") as f:
             f.write("\n".join(lines))
@@ -499,12 +519,18 @@ def cmd_premarket(args):
 
 def cmd_combined(args):
     """Show combined portfolio view (Omaha-Bot + Scion-Bot)."""
+    import json
+
+    from buffett_portfolio import BuffettPortfolioManager
+    from notify import ScionNotifier
+
     print("\n" + "=" * 60)
     print("  COMBINED DUAL-AGENT PORTFOLIO VIEW")
     print("=" * 60)
 
-    omaha_file = os.path.join(os.path.dirname(__file__), "buffett_portfolio.json")
-    scion_file = os.path.join(os.path.dirname(__file__), "portfolio.json")
+    state_root = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
+    omaha_file = os.path.join(state_root, "buffett_portfolio.json")
+    scion_file = os.path.join(state_root, "portfolio.json")
 
     omaha_positions = {}
     scion_positions = {}
@@ -552,13 +578,13 @@ def cmd_combined(args):
     omaha_pct = omaha_invested / total_capital * 100 if total_capital > 0 else 0
     scion_pct = scion_invested / total_capital * 100 if total_capital > 0 else 0
 
-    print(f"\n  Allocation:")
+    print("\n  Allocation:")
     print(f"    Omaha-Bot (hold forever):   {omaha_pct:5.1f}%")
     print(f"    Scion-Bot (tactical swings): {scion_pct:5.1f}%")
     print(f"    Cash (strategic reserve):    {cash_pct:5.1f}%")
 
     if omaha_positions:
-        print(f"\n  Omaha-Bot Holdings:")
+        print("\n  Omaha-Bot Holdings:")
         pm = BuffettPortfolioManager()
         for sym, pos in sorted(omaha_positions.items()):
             cp = pm.get_current_price(sym)
@@ -570,7 +596,7 @@ def cmd_combined(args):
                 print(f"    {sym:<8} {pos['shares']:>4}sh @ ${pos['entry_price']:<8.2f} (N/A)")
 
     if scion_positions:
-        print(f"\n  Scion-Bot Holdings:")
+        print("\n  Scion-Bot Holdings:")
         spm = __import__("portfolio", fromlist=["ScionPortfolioManager"]).ScionPortfolioManager()
         for sym, pos in sorted(scion_positions.items()):
             cp = spm.get_current_price(sym)
@@ -601,6 +627,23 @@ def cmd_run(args):
       4. Scan news for moat threats
       5. Send consolidated WhatsApp alert
     """
+    import yfinance as yf
+    from buffett_analyzer import BuffettAnalyzer
+    from buffett_news_engine import BuffettNewsEngine
+    from buffett_portfolio import BuffettPortfolioManager
+    from buffett_screener import BuffettScreener
+    from earnings import (
+        format_earnings_brief,
+        format_earnings_warning,
+        get_upcoming_earnings,
+    )
+    from notify import ScionNotifier
+    from performance_tracker import (
+        log_run_cycle,
+        log_screener_result,
+        snapshot_portfolio,
+    )
+
     print("\n" + "=" * 60)
     print("  OMAHA-BOT: FULL AUTOMATED REVIEW CYCLE")
     print(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -619,8 +662,7 @@ def cmd_run(args):
         else:
             print("  All positions within normal parameters. No action needed.")
     else:
-        print("  No open positions. Cash: ${:,.0f} ({:.1f}%) — waiting for fat pitches.".format(
-            pm.cash, pm.get_cash_position_pct()))
+        print(f"  No open positions. Cash: ${pm.cash:,.0f} ({pm.get_cash_position_pct():.1f}%) — waiting for fat pitches.")
 
     print("\n--- STEP 2: Quality Compounder Screener ---")
     screener = BuffettScreener()
@@ -708,7 +750,6 @@ def cmd_run(args):
     if pm.positions:
         print(f"\n{pm.get_portfolio_summary()}")
 
-    import yfinance as yf
     positions_snapshot = []
     for sym, pos in pm.positions.items():
         try:
@@ -735,7 +776,7 @@ def cmd_run(args):
     print("=" * 60)
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description="Omaha-Bot: Warren Buffett Quality Compounder Agent")
     parser.add_argument("--notify", action="store_true", help="Send alerts via WhatsApp")
     parser.add_argument("--recipient", type=str, default=None, help="WhatsApp chat ID")
@@ -796,48 +837,58 @@ def main():
     debate_p.add_argument("symbol", type=str)
     debate_p.add_argument("--compile", action="store_true", help="Skip prepare, just compile from existing agent files")
 
-    args = parser.parse_args()
+    return parser
+
+
+def _result_code(result):
+    return result if isinstance(result, int) else 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.command == "screener":
-        cmd_screener(args)
+        return _result_code(cmd_screener(args))
     elif args.command == "analyze":
-        cmd_analyze(args)
+        return _result_code(cmd_analyze(args))
     elif args.command == "portfolio":
-        cmd_portfolio(args)
+        return _result_code(cmd_portfolio(args))
     elif args.command == "check":
-        cmd_check(args)
+        return _result_code(cmd_check(args))
     elif args.command == "add":
-        cmd_add(args)
+        return _result_code(cmd_add(args))
     elif args.command == "trim":
-        cmd_trim(args)
+        return _result_code(cmd_trim(args))
     elif args.command == "close":
-        cmd_close(args)
+        return _result_code(cmd_close(args))
     elif args.command == "news":
-        cmd_news(args)
+        return _result_code(cmd_news(args))
     elif args.command == "premarket":
-        cmd_premarket(args)
+        return _result_code(cmd_premarket(args))
     elif args.command == "combined":
-        cmd_combined(args)
+        return _result_code(cmd_combined(args))
     elif args.command == "run":
-        cmd_run(args)
+        return _result_code(cmd_run(args))
     elif args.command == "log-entry":
-        cmd_log_entry(args)
+        return _result_code(cmd_log_entry(args))
     elif args.command == "log-exit":
-        cmd_log_exit(args)
+        return _result_code(cmd_log_exit(args))
     elif args.command == "report":
-        cmd_report(args)
+        return _result_code(cmd_report(args))
     elif args.command == "feedback":
-        cmd_feedback(args)
+        return _result_code(cmd_feedback(args))
     elif args.command == "daily-check":
-        cmd_daily_check(args)
+        return _result_code(cmd_daily_check(args))
     elif args.command == "debate":
-        from debate import cmd_debate, cmd_prepare, cmd_compile
+        from debate import cmd_compile, cmd_debate
         if args.compile:
-            cmd_compile(args.symbol)
+            result = cmd_compile(args.symbol)
         else:
-            cmd_debate(args.symbol)
+            result = cmd_debate(args.symbol)
+        return _result_code(result)
     elif args.command == "tracker":
-        cmd_tracker(args)
+        return _result_code(cmd_tracker(args))
     else:
         parser.print_help()
         print("\nExample usage:")
@@ -859,7 +910,8 @@ def main():
         print("  python buffett_main.py daily-check          # Daily position monitor")
         print("  python buffett_main.py tracker              # Show open positions")
         print("  python buffett_main.py debate AAPL          # Bull/Bear/Judge debate on a ticker")
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,7 +1,6 @@
 """Focused accounting tests for the Omaha portfolio manager."""
 
 import pytest
-
 from buffett_portfolio import BuffettPortfolioManager
 
 

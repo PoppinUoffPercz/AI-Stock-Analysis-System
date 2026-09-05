@@ -23,7 +23,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import yfinance as yf
-
 from entry_timing import assess
 from tracker import TRADES_FILE
 

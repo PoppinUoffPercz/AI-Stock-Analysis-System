@@ -1,0 +1,84 @@
+name: Integrated Stock Analysis CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test-lint-cli:
+    runs-on: ubuntu-latest
+    env:
+      SCION_RUFF_RULES: BLE001,DTZ005,F541,S110,I001,F401,F841,DTZ007,DTZ011,SIM115,RUF010,RUF015,RUF059,S112,C401,F811,PERF102,PERF402,UP032
+      SCION_RUFF_MAX_FINDINGS: "253"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install the three CLI packages
+        run: |
+          python -m pip install -e "backtest-engine[dev]"
+          python -m pip install -e scion-omaha-bots
+          python -m pip install -e ".[dev]"
+      - name: Run root and Scion/Omaha tests
+        run: python -m pytest tests scion-omaha-bots
+      - name: Run full backtest-engine suite
+        working-directory: backtest-engine
+        run: python -m pytest
+      - name: Lint root package
+        run: python -m ruff check stock_analysis tests
+      - name: Lint backtest engine
+        working-directory: backtest-engine
+        run: python -m ruff check src tests
+      - name: Enforce clean Scion/Omaha safe-fix rules
+        run: >-
+          python -m ruff check scion-omaha-bots
+          --select F401,F541,F811,I001,RUF010,UP032
+      - name: Guard Scion/Omaha scoped lint baseline
+        shell: bash
+        run: |
+          set +e
+          python -m ruff check scion-omaha-bots \
+            --select "$SCION_RUFF_RULES" \
+            --output-format json > "$RUNNER_TEMP/scion-ruff.json"
+          ruff_status=$?
+          set -e
+          if [ "$ruff_status" -gt 1 ]; then
+            exit "$ruff_status"
+          fi
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          findings = json.loads((Path(os.environ["RUNNER_TEMP"]) / "scion-ruff.json").read_text())
+          limit = int(os.environ["SCION_RUFF_MAX_FINDINGS"])
+          count = len(findings)
+          print(f"Scion/Omaha scoped Ruff findings: {count} (baseline ceiling: {limit})")
+          if count > limit:
+              raise SystemExit(f"Scion/Omaha lint debt increased: {count} > {limit}")
+          PY
+      - name: Type-check backtest engine
+        working-directory: backtest-engine
+        run: python -m mypy src
+      - name: Check offline help
+        run: |
+          python -m stock_analysis --help
+          python -m stock_analysis scion --help
+          python -m stock_analysis omaha --help
+          python -m stock_analysis backtest --help
+      - name: Run deterministic synthetic backtest
+        run: >-
+          python -m stock_analysis
+          --outputs-root "$RUNNER_TEMP/stock-analysis-outputs"
+          backtest discover
+          --strategy sma_cross
+          --synthetic
+          --days 200
+          --seed 42
+          --cost zero
+
+      # TODO(packaging): add an installed-wheel CLI smoke once the legacy Scion/Omaha
+      # modules are packaged with the wrapper instead of resolved from the source tree.

@@ -28,6 +28,7 @@ from backtest_engine import __version__
 from backtest_engine.config import resolve_settings
 from backtest_engine.data.ingest import ingest_symbol
 from backtest_engine.data.store import read_clean
+from backtest_engine.identifiers import validate_identifier
 from backtest_engine.metrics.core import attach_metric_panel, bias_audit
 from backtest_engine.metrics.tearsheet import make_report_config, render_report
 from backtest_engine.pipeline.discovery import run_spec
@@ -209,8 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.cmd == "replay":
         return _cmd_replay(args)
 
-    print(f"[stub] `{args.cmd}` is not implemented in v1", file=sys.stderr)
-    return 2
+    parser.error(f"unsupported command: {args.cmd}")
 
 
 def _cmd_backtest(args: argparse.Namespace) -> int:
@@ -314,16 +314,20 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
-
     settings = resolve_settings()
     outputs_dir = settings.outputs_dir
-    out_dir = outputs_dir / args.run_id
+    try:
+        run_id = validate_identifier(args.run_id, field_name="run_id")
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    out_dir = outputs_dir / run_id
     result_path = out_dir / "result.json"
     if result_path.exists():
         try:
             result = load_result(result_path)
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            print(f"Invalid persisted result for run {args.run_id}: {exc}", file=sys.stderr)
+            print(f"Invalid persisted result for run {run_id}: {exc}", file=sys.stderr)
             return 1
         report = render_report(
             result,
@@ -334,14 +338,14 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
     metrics_path = out_dir / "metrics.json"
     if not metrics_path.exists():
-        print(f"No metrics.json for run {args.run_id} under {outputs_dir}", file=sys.stderr)
+        print(f"No metrics.json for run {run_id} under {outputs_dir}", file=sys.stderr)
         return 1
     metrics = json.loads(metrics_path.read_text())
     # Legacy metric-only artifacts remain readable, but new runs persist the
     # complete BacktestResult and take the branch above.
     html_path = out_dir / "report.html"
     html_path.write_text(
-        f"<!doctype html><html><body><h1>Report {args.run_id}</h1>"
+        f"<!doctype html><html><body><h1>Report {run_id}</h1>"
         f"<pre>{json.dumps(metrics, indent=2)}</pre></body></html>",
         encoding="utf-8",
     )
@@ -473,7 +477,12 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
 def _cmd_compare(args: argparse.Namespace) -> int:
     outputs_root = args.outputs_root or resolve_settings().outputs_dir
     rows = []
-    for run_id in args.run_id:
+    for raw_run_id in args.run_id:
+        try:
+            run_id = validate_identifier(raw_run_id, field_name="run_id")
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         path = outputs_root / run_id / "result.json"
         if not path.is_file():
             print(f"Missing result artifact for run {run_id}: {path}", file=sys.stderr)

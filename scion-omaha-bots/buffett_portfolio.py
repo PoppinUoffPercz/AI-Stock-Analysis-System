@@ -12,13 +12,14 @@ Key differences from ScionPortfolioManager (Burry):
   - Annual turnover target: 5-15% (decades-long holding)
 """
 
+import datetime
 import json
 import os
-import datetime
+
 import yfinance as yf
 
-
-PORTFOLIO_FILE = os.path.join(os.path.dirname(__file__), "buffett_portfolio.json")
+STATE_ROOT = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
+PORTFOLIO_FILE = os.path.join(STATE_ROOT, "buffett_portfolio.json")
 
 
 class BuffettPortfolioManager:
@@ -48,6 +49,7 @@ class BuffettPortfolioManager:
             self.trade_log = data.get("trade_log", [])
 
     def save_state(self):
+        os.makedirs(os.path.dirname(os.path.abspath(self.portfolio_file)), exist_ok=True)
         data = {
             "capital": self.capital,
             "cash": self.cash,

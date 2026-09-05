@@ -20,16 +20,16 @@ Agent files (written by subagents):
 Vault output:
   Stock Research/Daily Briefs/YYYY-MM-DD {TICKER} Debate.md
 """
+import datetime
 import json
 import os
 import sys
-import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import yfinance as yf
-from ta_lib import compute_rsi, compute_macd, compute_smas, compute_atr
 from smart_money import get_smart_money_score
+from ta_lib import compute_atr, compute_macd, compute_rsi, compute_smas
 
 VAULT_DIR = os.path.join(os.path.expanduser("~"),
     "OneDrive", "Documents", "Obsidian Vault",
@@ -164,8 +164,8 @@ def get_data_summary(data):
     lines.append(f"**Sector:** {data.get('sector', 'N/A')} | **Industry:** {data.get('industry', 'N/A')}")
     lines.append("")
     lines.append("### Price & Technicals")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"| :--- | :--- |")
+    lines.append("| Metric | Value |")
+    lines.append("| :--- | :--- |")
     lines.append(f"| Current Price | {_fmt(data.get('current_price'), 'dollar')} |")
     lines.append(f"| 52W Range | {_fmt(data.get('low_52w'), 'dollar')} — {_fmt(data.get('high_52w'), 'dollar')} |")
     lines.append(f"| From 52W Low | {_fmt(data.get('pct_from_low'), 'pct')} |")
@@ -178,8 +178,8 @@ def get_data_summary(data):
     lines.append(f"| Beta | {_fmt(data.get('beta'))} |")
     lines.append("")
     lines.append("### Fundamentals")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"| :--- | :--- |")
+    lines.append("| Metric | Value |")
+    lines.append("| :--- | :--- |")
     lines.append(f"| Market Cap | {_fmt(data.get('market_cap'), 'dollar')} |")
     lines.append(f"| P/E | {_fmt(data.get('pe_ratio'))}x |")
     lines.append(f"| Forward P/E | {_fmt(data.get('forward_pe'))}x |")
@@ -375,8 +375,8 @@ def compile_report(ticker, wait=False):
     lines.append("")
     if judge_score is not None:
         save_debate_score(ticker, judge_score)
-        lines.append(f"| Component | Value |")
-        lines.append(f"| :--- | :--- |")
+        lines.append("| Component | Value |")
+        lines.append("| :--- | :--- |")
         lines.append(f"| **Debate Score** | {judge_score}/100 |")
         lines.append(f"| **Score Modifier** | {mod:+d} |")
         lines.append(f"| **Direction** | {'Bullish' if mod > 5 else 'Bearish' if mod < -5 else 'Neutral'} |")

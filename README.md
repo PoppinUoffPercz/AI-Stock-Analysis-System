@@ -4,6 +4,48 @@ This repository is centered on [`backtest-engine`](backtest-engine/): a Python 3
 
 The goal is not to manufacture a favorable backtest. The goal is to make a result reproducible, inspectable, and difficult to obtain through accidental leakage.
 
+## Integrated CLI
+
+`stock-analysis` is the canonical command for this repository. Install the three
+editable packages from the repository root:
+
+```powershell
+python -m pip install -e backtest-engine
+python -m pip install -e scion-omaha-bots
+python -m pip install -e .
+```
+
+Show the available namespaces:
+
+```powershell
+stock-analysis --help
+```
+
+Examples:
+
+```powershell
+stock-analysis scion --watchlist LULU,PFE screener
+stock-analysis omaha --watchlist KO,PG run
+stock-analysis backtest discover --strategy sma_cross --synthetic --days 200 --seed 42 --cost zero
+stock-analysis portfolio combined
+stock-analysis tracking report
+stock-analysis tracking feedback
+stock-analysis tracking daily-check
+stock-analysis tracking show
+stock-analysis credit status
+stock-analysis debate AAPL --compile
+stock-analysis research run --bot scion
+```
+
+Use `--state-root`, `--data-root`, and `--outputs-root` before the namespace to
+keep a run's files in an explicit location. Help commands are offline. Screener,
+research, credit, and full portfolio checks may need market data. Notifications
+and vault reports need their corresponding local integrations.
+
+The original commands remain supported for compatibility: `python main.py`,
+`python buffett_main.py`, and `bte`. They are not automatic links between live
+research, trading decisions, and backtests.
+
 ## What It Demonstrates
 
 - A shared pandas signal contract across VectorBT discovery and Backtrader validation.

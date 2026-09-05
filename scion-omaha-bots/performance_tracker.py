@@ -13,10 +13,12 @@ import datetime
 import json
 import os
 
-
-PERF_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "performance_log.csv")
+STATE_ROOT = os.environ.get(
+    "STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(os.path.abspath(__file__))
+)
+PERF_FILE = os.path.join(STATE_ROOT, "performance_log.csv")
 PORTFOLIO_SNAPSHOT_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "performance_portfolio.csv"
+    STATE_ROOT, "performance_portfolio.csv"
 )
 
 _HEADERS = [
@@ -32,6 +34,7 @@ _PORTFOLIO_HEADERS = [
 def _ensure_file(path, headers):
     if not os.path.exists(path):
         try:
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
             with open(path, "w", newline="") as f:
                 w = csv.writer(f)
                 w.writerow(headers)

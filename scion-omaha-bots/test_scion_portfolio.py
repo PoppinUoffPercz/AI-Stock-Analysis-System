@@ -1,7 +1,6 @@
 """Focused accounting tests for the Scion portfolio manager."""
 
 import pytest
-
 from portfolio import ScionPortfolioManager
 
 

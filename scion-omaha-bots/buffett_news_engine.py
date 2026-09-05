@@ -9,13 +9,12 @@ Detects:
   4. Industry disruption (tech shifts, regulatory action)
   5. Thesis-breaking events (fraud, antitrust, delisting)
 """
-import yfinance as yf
 import datetime
 import json
 import os
 
+import yfinance as yf
 from news_utils import extract_news_fields
-
 
 # Buffett-relevant keyword categories
 MOAT_THREAT_KEYWORDS = [

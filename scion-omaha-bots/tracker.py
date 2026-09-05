@@ -5,15 +5,16 @@ Tracks every entry + exit, snapshots open positions daily,
 and persists to CSV for analysis by report_card.py and feedback.py.
 """
 import csv
-import os
 import datetime
 import json
-import yfinance as yf
+import os
 import sys
+
+import yfinance as yf
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from reflection import ReflectionLog, log_reflection_on_exit
+from reflection import ReflectionLog
 
 STATE_ROOT = os.environ.get(
     "STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(os.path.abspath(__file__))

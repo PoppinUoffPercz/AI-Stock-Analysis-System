@@ -1,8 +1,9 @@
+import datetime
 import json
 import os
-import datetime
+
 import yfinance as yf
-from ta_lib import compute_rsi, compute_atr, compute_sma
+from ta_lib import compute_atr, compute_rsi, compute_sma
 
 STATE_ROOT = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
 PORTFOLIO_FILE = os.path.join(STATE_ROOT, "portfolio.json")

@@ -1,4 +1,6 @@
-from notify import ScionNotifier
+from datetime import datetime, timezone
+
+from notify import ScionNotifier, _format_generated_date
 
 
 class _Stream:
@@ -43,3 +45,9 @@ def test_stdio_spawn_passes_untrusted_paths_without_shell(monkeypatch, tmp_path)
         ["node", str(zappy_path), "--config", "config; malicious"],
     )
     assert captured["kwargs"]["shell"] is False
+
+
+def test_generated_date_format_is_deterministic():
+    timestamp = datetime(2026, 9, 4, 22, 3, tzinfo=timezone.utc)
+
+    assert _format_generated_date(timestamp) == "09/04/2026"

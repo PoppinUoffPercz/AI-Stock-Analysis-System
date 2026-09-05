@@ -5,10 +5,9 @@ Reads trades.csv and daily_pnl.csv from tracker.py,
 computes win rates, R:R, score bucketing, sector breakdown,
 and writes a markdown report to the Obsidian vault.
 """
+import datetime
 import os
 import sys
-import datetime
-import json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,12 +27,6 @@ def _fmt_pct(val):
     if val is None:
         return "N/A"
     return f"{val:+.2f}%"
-
-
-def _fmt_dollar(val):
-    if val is None:
-        return "N/A"
-    return f"${val:.2f}"
 
 
 def _fetch_benchmark_return(benchmark, entry_date, exit_date):
@@ -204,14 +197,14 @@ def generate_markdown_report(tracker, bot=None):
     # Summary section
     lines.append("## Summary")
     lines.append("")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"| :--- | :--- |")
+    lines.append("| Metric | Value |")
+    lines.append("| :--- | :--- |")
     lines.append(f"| **Trades Closed** | {metrics['total_closed']} |")
     lines.append(f"| **Positions Open** | {metrics['total_open']} |")
     if metrics['win_rate'] is not None:
         lines.append(f"| **Win Rate** | {metrics['win_rate']}% ({metrics['wins']}W / {metrics['losses']}L) |")
     else:
-        lines.append(f"| **Win Rate** | N/A (no closed trades) |")
+        lines.append("| **Win Rate** | N/A (no closed trades) |")
     lines.append(f"| **Total Return (Closed)** | {_fmt_pct(metrics['total_pnl_pct'])} |")
     if metrics.get('cumulative_alpha') is not None:
         lines.append(f"| **Cumulative Alpha vs SPY** | {_fmt_pct(metrics['cumulative_alpha'])} |")
@@ -227,8 +220,8 @@ def generate_markdown_report(tracker, bot=None):
     lines.append("## Open Positions")
     lines.append("")
     if metrics["open_positions"]:
-        lines.append(f"| Ticker | Bot | Entry | Current | P&L% | Days | Stop | Target 1 | Target 2 | Score |")
-        lines.append(f"| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+        lines.append("| Ticker | Bot | Entry | Current | P&L% | Days | Stop | Target 1 | Target 2 | Score |")
+        lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
         blinker = "🔴" if bot else ""
         for p in sorted(metrics["open_positions"], key=lambda x: x["pnl_pct"]):
             pnl_str = f"{p['pnl_pct']:+.2f}%"

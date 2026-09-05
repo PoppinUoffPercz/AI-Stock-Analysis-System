@@ -9,16 +9,12 @@ sentiment shifts. Designed to detect:
 
 Integrates with the screener and analyzer modules.
 """
-import yfinance as yf
 import datetime
 import json
 import os
-import asyncio
-import subprocess
-import sys
 
+import yfinance as yf
 from news_utils import extract_news_fields
-
 
 # Burry's "ick" and reversal keyword dictionaries
 ICK_KEYWORDS = [
@@ -196,7 +192,7 @@ class NewsEngine:
             for item in scan_results["thesis_breaking"]:
                 lines.append(f"  [{item['symbol']}] {item['title']}")
                 lines.append(f"    Source: {item['publisher']}")
-                lines.append(f"    -> Consider immediate stop-loss review")
+                lines.append("    -> Consider immediate stop-loss review")
             lines.append("")
 
         if scan_results["extreme_panic"]:
@@ -204,7 +200,7 @@ class NewsEngine:
             for item in scan_results["extreme_panic"]:
                 lines.append(f"  [{item['symbol']}] {item['title']}")
                 lines.append(f"    Source: {item['publisher']}")
-                lines.append(f"    -> If price holds support, this may be a capitulation buy")
+                lines.append("    -> If price holds support, this may be a capitulation buy")
             lines.append("")
 
         if scan_results["reversal_catalyst"]:
@@ -212,7 +208,7 @@ class NewsEngine:
             for item in scan_results["reversal_catalyst"]:
                 lines.append(f"  [{item['symbol']}] {item['title']}")
                 lines.append(f"    Source: {item['publisher']}")
-                lines.append(f"    -> Positive inflection in depressed stock")
+                lines.append("    -> Positive inflection in depressed stock")
             lines.append("")
 
         return "\n".join(lines)

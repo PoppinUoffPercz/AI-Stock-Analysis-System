@@ -16,10 +16,9 @@ import datetime
 import json
 import os
 import re
-import sys
 import urllib.request
-import yfinance as yf
 
+import yfinance as yf
 
 # --- Bond ETF tickers ---
 TREASURY_TICKERS = {
@@ -572,7 +571,7 @@ class CreditMonitor:
 
         lines = []
         lines.append("=" * 60)
-        lines.append(f"  CREDIT MARKET MONITOR")
+        lines.append("  CREDIT MARKET MONITOR")
         lines.append(f"  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")

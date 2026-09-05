@@ -21,7 +21,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ta_lib import compute_rsi, compute_smas, compute_volume_ratio, compute_ttm_squeeze
+from ta_lib import compute_rsi, compute_smas, compute_ttm_squeeze, compute_volume_ratio
 
 
 def _sma_series(close, period):

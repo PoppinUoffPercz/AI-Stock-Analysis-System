@@ -17,18 +17,17 @@ Rules implemented:
 Excluded rules (per user request):
   - SCORE_FLOOR: NOT applied
 """
+import datetime
 import os
 import sys
-import datetime
-import json
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from tracker import Tracker
-from report_card import compute_metrics
 from credit_monitor import CreditMonitor
+from report_card import compute_metrics
+from tracker import Tracker
 
 VAULT_DIR = os.path.join(os.path.expanduser("~"),
     "OneDrive", "Documents", "Obsidian Vault",
@@ -275,8 +274,8 @@ class FeedbackEngine:
             return report
 
         lines.append("## Context")
-        lines.append(f"| Metric | Value |")
-        lines.append(f"| :--- | :--- |")
+        lines.append("| Metric | Value |")
+        lines.append("| :--- | :--- |")
         lines.append(f"| **VIX** | {self.vix or 'N/A'} |")
         lines.append(f"| **Credit Stress** | {self.credit_score or 'N/A'}/100 |")
         lines.append(f"| **Total Closed Trades** | {self.metrics['total_closed']} |")
@@ -320,7 +319,7 @@ class FeedbackEngine:
                 continue
 
             try:
-                response = input(f"  Apply? (y/n): ").strip().lower()
+                response = input("  Apply? (y/n): ").strip().lower()
             except (EOFError, KeyboardInterrupt):
                 response = "n"
 
@@ -344,7 +343,7 @@ def cmd_feedback(interactive=True):
             if meta["applied"]:
                 print(f"  [{rule}] {meta['name']}: ✅ APPLIED")
     else:
-        print(f"\n  Feedback report saved. Run with --apply to interactively apply.")
+        print("\n  Feedback report saved. Run with --apply to interactively apply.")
 
 
 if __name__ == "__main__":

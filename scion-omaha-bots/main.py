@@ -64,7 +64,7 @@ def cmd_screener(args):
     display_cols = ["Symbol", "Price", "Dist from Low", "Current Ratio",
                     "Debt/Equity", "FCF Yield", "Sentiment", "Scion Score"]
     print(results[display_cols].to_string(index=False))
-    print(f"\nFull report saved to: screener_output.md")
+    print("\nFull report saved to: screener_output.md")
 
     # Send WhatsApp alert if enabled
     if args.notify:
@@ -469,7 +469,7 @@ def cmd_premarket(args):
         pd.set_option("display.width", 1200)
         display_cols = ["Symbol", "Price", "Dist from Low", "Current Ratio", "Debt/Equity", "FCF Yield", "Sentiment", "Scion Score"]
         print(top5[display_cols].to_string(index=False))
-        print(f"\n  Full screener: python main.py screener")
+        print("\n  Full screener: python main.py screener")
     else:
         print("  No swing candidates above 25-point threshold.")
 
@@ -632,7 +632,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "daily-check":
         return _result_code(cmd_daily_check(args))
     elif args.command == "debate":
-        from debate import cmd_compile, cmd_debate, cmd_prepare
+        from debate import cmd_compile, cmd_debate
         if args.compile:
             result = cmd_compile(args.symbol)
         else:

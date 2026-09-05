@@ -112,11 +112,6 @@ class YFinanceSource(Source):
 
         self._yf = yf
 
-    @staticmethod
-    def _stooq_to_clean(symbol, df) -> pd.DataFrame:
-        # Helper kept for symmetry; Stooq uses its own class.
-        raise NotImplementedError
-
     def fetch(self, symbol: str, start: str | None = None, end: str | None = None) -> pd.DataFrame:
         """Fetch OHLCV for `symbol`. Throttles + retries per Settings."""
         last_err: Exception | None = None

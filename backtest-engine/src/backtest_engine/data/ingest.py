@@ -25,6 +25,7 @@ from backtest_engine.data.sources.base import (
     YFinanceSource,
 )
 from backtest_engine.data.store import read_clean, write_clean
+from backtest_engine.identifiers import validate_identifier
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def ingest_symbol(
     input_path: Path | None = None,
 ) -> tuple[int, Path | None]:
     """Fetch, clean, write parquet. Returns rows and an optional boundary file."""
+    symbol = validate_identifier(symbol, field_name="symbol")
     if source == "csv":
         if input_path is None:
             raise ValueError("CSV source requires an input path")
@@ -94,6 +96,7 @@ def _cross_check_stooq(symbol: str, yf_df: pd.DataFrame) -> None:
 
 def _write_boundary(df: pd.DataFrame, clean_root: Path, symbol: str, universe_root: Path) -> Path:
     """Write the symbol's first/last active date to a sidecar boundary file."""
+    symbol = validate_identifier(symbol, field_name="symbol")
     universe_root = Path(universe_root)
     universe_root.mkdir(parents=True, exist_ok=True)
     bfile = universe_root / f"{symbol.upper()}_boundary.csv"

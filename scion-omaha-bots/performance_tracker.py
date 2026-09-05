@@ -13,7 +13,6 @@ import datetime
 import json
 import os
 
-
 STATE_ROOT = os.environ.get(
     "STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(os.path.abspath(__file__))
 )

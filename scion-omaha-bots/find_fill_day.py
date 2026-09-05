@@ -3,7 +3,9 @@
 If a fill price is inside day X's range, X is a plausible real execution day.
 Compare that to the logged entry_date to expose the logging convention.
 """
-import csv, sys
+import csv
+import sys
+
 import yfinance as yf
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

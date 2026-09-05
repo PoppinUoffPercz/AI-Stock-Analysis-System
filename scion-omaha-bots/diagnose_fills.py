@@ -1,5 +1,7 @@
 """Diagnose R8 fill-vs-close anomaly: is each logged fill inside the entry-day OHLC range?"""
-import csv, sys
+import csv
+import sys
+
 import yfinance as yf
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

@@ -6,9 +6,9 @@ Mirrors TradingAgents' memory/reflection concept:
 - Re-injects recent reflections into screener context
 - No LLM needed — reflections are auto-generated from trade data
 """
+import datetime
 import json
 import os
-import datetime
 
 STATE_ROOT = os.environ.get(
     "STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(os.path.abspath(__file__))

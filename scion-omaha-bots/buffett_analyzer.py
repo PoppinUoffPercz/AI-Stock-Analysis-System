@@ -11,16 +11,15 @@ Calculates Owner Earnings (Buffett's preferred cash flow metric) and
 produces a long-term intrinsic value assessment with margin of safety.
 """
 
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import sys
-import os
 import datetime
+import os
+import sys
 
-from ta_lib import compute_all as compute_ta
-from smart_money import get_smart_money_score
+import pandas as pd
+import yfinance as yf
 from news_utils import extract_news_fields
+from smart_money import get_smart_money_score
+from ta_lib import compute_all as compute_ta
 
 
 class BuffettAnalyzer:
@@ -417,8 +416,8 @@ class BuffettAnalyzer:
 
         # Executive Summary
         report.append("## Executive Summary")
-        report.append(f"| Parameter | Value |")
-        report.append(f"| :--- | :--- |")
+        report.append("| Parameter | Value |")
+        report.append("| :--- | :--- |")
         report.append(f"| **Current Price** | ${current_price} |")
         if intrinsic:
             oe_val = intrinsic.get('current_oe_annual')
@@ -487,7 +486,7 @@ class BuffettAnalyzer:
             report.append(f"- **Intrinsic Share Price (10y DCF + TV):** ${intrinsic['intrinsic_share_price']}")
             report.append(f"- **Current Share Price:** ${intrinsic['current_share_price']}")
             report.append(f"- **Margin of Safety:** {intrinsic['margin_of_safety_pct']}")
-            report.append(f"- *Growth assumption: 8% OE growth for 10y; 3% terminal; 10% discount rate*")
+            report.append("- *Growth assumption: 8% OE growth for 10y; 3% terminal; 10% discount rate*")
             val_verdict = "PASS (Margin of Safety Positive)" if isinstance(intrinsic['margin_of_safety_pct'], str) and "%" in intrinsic['margin_of_safety_pct'] and not intrinsic['margin_of_safety_pct'].startswith("None") else "REVIEW (No Margin of Safety)"
         else:
             report.append("*Could not calculate Owner Earnings — insufficient or negative free cash flow data.*")
@@ -539,8 +538,8 @@ class BuffettAnalyzer:
 
         # Quick Stats
         report.append("## Quick Fundamental Stats")
-        report.append(f"| Metric | Value | Buffett Threshold |")
-        report.append(f"| :--- | :--- | :--- |")
+        report.append("| Metric | Value | Buffett Threshold |")
+        report.append("| :--- | :--- | :--- |")
         report.append(f"| **ROE** | {self.info.get('returnOnEquity', 0)*100:.1f}% | > 15% preferred |" if self.info.get("returnOnEquity") else "| **ROE** | N/A | > 15% |")
         report.append(f"| **Gross Margin** | {self.info.get('grossMargins', 0)*100:.1f}% | > 40% (moat indicator) |" if self.info.get("grossMargins") else "| **Gross Margin** | N/A | > 40% |")
         report.append(f"| **Operating Margin** | {self.info.get('operatingMargins', 0)*100:.1f}% | > 20% |" if self.info.get("operatingMargins") else "| **Operating Margin** | N/A | > 20% |")

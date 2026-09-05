@@ -4,7 +4,9 @@ The six still-open backfill positions were stamped 2026-07-08 by
 backfill_current_positions() - same batch that misdated VRT/BA/AXON/LNG.
 This tells us whether the whole batch drifted or only the closed trades.
 """
-import json, sys
+import json
+import sys
+
 import yfinance as yf
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

@@ -5,15 +5,15 @@ Fetches current prices for all open positions, compares to stops and targets,
 logs a daily P&L snapshot, and writes a vault markdown brief.
 Run manually: python daily_check.py
 """
+import datetime
 import os
 import sys
-import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from tracker import Tracker
 from credit_monitor import CreditMonitor
 from debate import get_debate_score, score_modifier
+from tracker import Tracker
 
 VAULT_DIR = os.path.join(os.path.expanduser("~"),
     "OneDrive", "Documents", "Obsidian Vault",
@@ -70,8 +70,8 @@ def generate_daily_brief(tracker=None, prices_dict=None):
 
     # Market context
     lines.append("## Market Context")
-    lines.append(f"| SPY | VIX | Positions |")
-    lines.append(f"| :--- | :--- | :--- |")
+    lines.append("| SPY | VIX | Positions |")
+    lines.append("| :--- | :--- | :--- |")
     spy_str = f"${market['spy']}" if market["spy"] else "N/A"
     vix_str = f"{market['vix']}" if market["vix"] else "N/A"
     vix_note = ""

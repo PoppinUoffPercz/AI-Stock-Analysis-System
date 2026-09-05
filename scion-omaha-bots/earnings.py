@@ -7,6 +7,7 @@ Uses yfinance's built-in calendar data (no lxml dependency needed).
 Integrated into premarket briefings and deep-dive analysis.
 """
 import datetime
+
 import yfinance as yf
 
 

@@ -1,13 +1,12 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import sys
-import os
 import datetime
+import os
+import sys
 
-from ta_lib import compute_all as compute_ta
-from smart_money import get_smart_money_score
+import pandas as pd
+import yfinance as yf
 from news_utils import extract_news_fields
+from smart_money import get_smart_money_score
+from ta_lib import compute_all as compute_ta
 
 
 class ScionAnalyzer:
@@ -142,7 +141,7 @@ class ScionAnalyzer:
                 "Is Net-Net Candidate (Price < 2/3 NCAV)": net_net_ratio <= 0.67 if net_net_ratio != 999.0 else False
             }
         except Exception as e:
-            print(f"Error modeling Net-Net: {str(e)}")
+            print(f"Error modeling Net-Net: {e!s}")
             return None
 
     def run_financial_health_audit(self):
@@ -294,8 +293,8 @@ class ScionAnalyzer:
 
         # 1. Executive Setup
         report.append("\n## Executive Setup")
-        report.append(f"| Parameter | Value | Details |")
-        report.append(f"| :--- | :--- | :--- |")
+        report.append("| Parameter | Value | Details |")
+        report.append("| :--- | :--- | :--- |")
         report.append(f"| **Current Price** | ${current_price} | Current market trade price |")
         if tech:
             report.append(f"| **Entry Zone** | {tech['Entry Zone']} | Under Burry's 10-15% of 52W low threshold |")
@@ -372,29 +371,29 @@ class ScionAnalyzer:
         # 2. Intrinsic Valuation Models
         report.append("\n## Intrinsic Valuation Models")
         if dcf:
-            report.append(f"### 1. Conservative Discounted Cash Flow (DCF)")
+            report.append("### 1. Conservative Discounted Cash Flow (DCF)")
             report.append(f"- **Implied Share Price:** ${dcf['Intrinsic Share Price']}")
             report.append(f"- **Margin of Safety:** {dcf['Margin of Safety']}")
             report.append(f"- **Projected Terminal Value:** ${dcf['Terminal Value']:,}")
-            report.append(f"- *Growth Assumption: 4% annual FCF growth for 5y; 2% terminal growth; 10% discount rate.*")
+            report.append("- *Growth Assumption: 4% annual FCF growth for 5y; 2% terminal growth; 10% discount rate.*")
         else:
-            report.append(f"\n### 1. Discounted Cash Flow (DCF)")
-            report.append(f"*Could not model DCF: Company has negative, unstable, or missing Free Cash Flow data.*")
+            report.append("\n### 1. Discounted Cash Flow (DCF)")
+            report.append("*Could not model DCF: Company has negative, unstable, or missing Free Cash Flow data.*")
 
         if net_net:
-            report.append(f"\n### 2. Graham Net-Net (NCAV) Model")
+            report.append("\n### 2. Graham Net-Net (NCAV) Model")
             report.append(f"- **Net Current Asset Value (NCAV):** ${net_net['Net Current Asset Value (NCAV)'] / 1e6:.2f} Million")
             report.append(f"- **NCAV per Share:** ${net_net['NCAV per Share']}")
             report.append(f"- **Price / NCAV Ratio:** {net_net['Net-Net Ratio (Price / NCAV)']}")
             report.append(f"- **Is Graham Net-Net Asset Play?** {'**YES** (Price < 2/3 NCAV)' if net_net['Is Net-Net Candidate (Price < 2/3 NCAV)'] else 'No'}")
         else:
-            report.append(f"\n### 2. Graham Net-Net (NCAV) Model")
-            report.append(f"*Could not model NCAV: Balance sheet data incomplete or current assets do not exceed total liabilities.*")
+            report.append("\n### 2. Graham Net-Net (NCAV) Model")
+            report.append("*Could not model NCAV: Balance sheet data incomplete or current assets do not exceed total liabilities.*")
 
         # 3. Balance Sheet Stress-Test & Ownership
         report.append("\n## Balance Sheet & Ownership Audit")
-        report.append(f"| Metric | Value | Burry Ideal Guardrails | Rating |")
-        report.append(f"| :--- | :--- | :--- | :--- |")
+        report.append("| Metric | Value | Burry Ideal Guardrails | Rating |")
+        report.append("| :--- | :--- | :--- | :--- |")
         cr = health.get("Current Ratio")
         cr_rating = "Fortress" if isinstance(cr, float) and cr >= 2.0 else ("Adequate" if isinstance(cr, float) and cr >= 1.5 else "Weak")
         report.append(f"| **Current Ratio** | {cr} | $\\ge 2.0$ | {cr_rating} |")

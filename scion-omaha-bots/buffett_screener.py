@@ -14,17 +14,16 @@ Key differences from ScionScreener:
   - Durable competitive advantage indicators
 """
 
-import yfinance as yf
-import pandas as pd
-import numpy as np
 import datetime
 import os
 
-from ta_lib import compute_rsi, compute_smas, compute_macd
-from smart_money import get_smart_money_score
+import pandas as pd
+import yfinance as yf
+from news_utils import extract_news_fields
 from reflection import ReflectionLog
 from screener import _discovery_tickers
-from news_utils import extract_news_fields
+from smart_money import get_smart_money_score
+from ta_lib import compute_macd, compute_rsi, compute_smas
 
 
 class BuffettScreener:
@@ -487,7 +486,7 @@ class BuffettScreener:
                     print(f"  -> {symbol} scored {buffett_score:.1f}/100 (below 40 threshold, skipping)")
 
             except Exception as e:
-                print(f"Error screening {symbol}: {str(e)}")
+                print(f"Error screening {symbol}: {e!s}")
 
         df = pd.DataFrame(self.results)
         if not df.empty:

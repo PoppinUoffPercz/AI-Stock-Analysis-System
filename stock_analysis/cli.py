@@ -122,20 +122,6 @@ def _run_packaged_bot(runner_name: str, label: str, domain_args: list[str]) -> i
     return _result_code(runner(domain_args))
 
 
-def _run_legacy_bot(module_name: str, label: str, domain_args: list[str]) -> int:
-    try:
-        module = _load_legacy_module(module_name)
-        runner = module.main
-    except (AttributeError, ImportError, ModuleNotFoundError) as exc:
-        print(f"Unable to load {label} CLI component.", file=sys.stderr)
-        print(f"Expected installation/source location: {BOT_ROOT}", file=sys.stderr)
-        if isinstance(exc, ModuleNotFoundError) and exc.name:
-            print(f"Missing dependency: {exc.name}", file=sys.stderr)
-        return 1
-
-    return _result_code(runner(domain_args))
-
-
 def _run_scion(domain_args: list[str]) -> int:
     return _run_packaged_bot("scion_main", "Scion", domain_args)
 

@@ -1,4 +1,6 @@
-import csv, datetime
+import csv
+import datetime
+
 rows = list(csv.DictReader(open("trades.csv", encoding="utf-8")))
 hdr = f"{'sym':<6}{'entry':>9}{'exit':>9}{'logged_pnl':>11}{'computed_pnl':>13}{'entry_date':<12}{'exit_date':<12}{'days_held':>10}"
 print(hdr)

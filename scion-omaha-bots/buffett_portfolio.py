@@ -12,11 +12,11 @@ Key differences from ScionPortfolioManager (Burry):
   - Annual turnover target: 5-15% (decades-long holding)
 """
 
+import datetime
 import json
 import os
-import datetime
-import yfinance as yf
 
+import yfinance as yf
 
 STATE_ROOT = os.environ.get("STOCK_ANALYSIS_STATE_ROOT", os.path.dirname(__file__))
 PORTFOLIO_FILE = os.path.join(STATE_ROOT, "buffett_portfolio.json")

@@ -18,7 +18,8 @@ stock-analysis portfolio combined
 stock-analysis research run --bot scion
 ```
 
-Install this package with `python -m pip install -e scion-omaha-bots`.
+From the repository root, install the shared root package first, then this package:
+`python -m pip install -e .` followed by `python -m pip install -e ./scion-omaha-bots`.
 The historical `python main.py` and `python buffett_main.py` commands remain
 supported when run from this directory.
 

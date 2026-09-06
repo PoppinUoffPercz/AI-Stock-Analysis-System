@@ -10,9 +10,9 @@ The goal is not to manufacture a favorable backtest. The goal is to make a resul
 editable packages from the repository root:
 
 ```powershell
-python -m pip install -e backtest-engine
-python -m pip install -e scion-omaha-bots
 python -m pip install -e .
+python -m pip install -e "./backtest-engine[dev]"
+python -m pip install -e ./scion-omaha-bots
 ```
 
 Show the available namespaces:
@@ -104,10 +104,11 @@ These controls improve confidence in a simulation; they do not establish that a 
 Use Python 3.12 or newer. From the repository root on PowerShell:
 
 ```powershell
-cd backtest-engine
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+python -m pip install -e .
+python -m pip install -e "./backtest-engine[dev]"
+cd backtest-engine
 ```
 
 Run the exact deterministic, network-free demonstration:
@@ -193,7 +194,7 @@ The benchmark reports workload and environment metadata; it intentionally does n
 - The built-in buy-and-hold benchmark requires exactly one symbol. Multiasset results record the benchmark as unavailable rather than inventing an aggregation rule.
 - Point-in-time correctness depends on the supplied universe history. The included sample and demo fixtures are not a complete survivorship-free market database.
 - Market-data sources can contain errors, revisions, missing observations, and corporate-action differences. Validation and optional source cross-checks reduce, but do not eliminate, this risk.
-- NautilusTrader is an optional daily-bar replay adapter installed with `python -m pip install -e ".[execution]"`. It currently supports only the zero-cost model and is not a paper- or live-trading integration.
+- NautilusTrader is an optional daily-bar replay adapter installed from the repository root with `python -m pip install -e "./backtest-engine[execution]"`. It currently supports only the zero-cost model and is not a paper- or live-trading integration.
 - The platform models research assumptions; it does not model every exchange, broker, latency, liquidity, tax, borrow, or market-impact condition.
 
 ## Other Repository Content

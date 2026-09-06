@@ -93,16 +93,10 @@ def _apply_global_paths(raw_args: list[str], namespace_index: int) -> None:
 
 
 def _load_legacy_module(module_name: str):
-    bot_root = str(BOT_ROOT)
-    if bot_root not in sys.path:
-        sys.path.insert(0, bot_root)
-    return importlib.import_module(module_name)
+    return importlib.import_module(f"scion_omaha_bots.{module_name}")
 
 
 def _load_bot_package():
-    package_root = str(BOT_PACKAGE_SOURCE_ROOT)
-    if package_root not in sys.path:
-        sys.path.insert(0, package_root)
     return importlib.import_module("scion_omaha_bots")
 
 

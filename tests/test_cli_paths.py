@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from stock_analysis.config import AppPaths
+from stock_analysis.config import AppPaths, configured_outputs_root
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
@@ -41,6 +41,13 @@ def test_app_paths_apply_exports_legacy_path_defaults(tmp_path, monkeypatch) -> 
     assert environment["STOCK_ANALYSIS_STATE_ROOT"] == str(tmp_path / "state")
     assert environment["STOCK_ANALYSIS_DATA_ROOT"] == str(tmp_path / "data")
     assert environment["STOCK_ANALYSIS_OUTPUTS_ROOT"] == str(tmp_path / "outputs")
+
+
+def test_configured_outputs_root_prefers_environment(tmp_path, monkeypatch) -> None:
+    configured = tmp_path / "configured"
+    monkeypatch.setenv("STOCK_ANALYSIS_OUTPUTS_ROOT", str(configured))
+
+    assert configured_outputs_root(tmp_path / "legacy") == configured
 
 
 def test_integrated_backtest_writes_to_configured_output_root(tmp_path) -> None:

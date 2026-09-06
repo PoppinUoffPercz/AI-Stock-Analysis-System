@@ -182,7 +182,10 @@ This framework directly connects to:
 
 ```
 # Setup
-pip install -e ".[dev]"
+cd ..
+pip install -e .
+pip install -e "./backtest-engine[dev]"
+cd backtest-engine
 pre-commit install
 
 # Discover a strategy on persisted clean data
@@ -195,7 +198,9 @@ python -m backtest_engine.cli discover --strategy sma_cross --synthetic --days 7
 python -m backtest_engine.cli validate --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31 --cost us_equity_pershare
 
 # Optional NautilusTrader daily-bar replay (zero-cost boundary)
-pip install -e ".[execution]"
+cd ..
+pip install -e "./backtest-engine[execution]"
+cd backtest-engine
 python -m backtest_engine.cli replay --strategy sma_cross --symbol SPY --start 2020-01-01 --end 2024-12-31
 
 # List all registered strategies

@@ -10,6 +10,8 @@ __pycache__/
 .hypothesis/
 .superpowers/
 .worktrees/
+.verification/
+shadow_log.csv
 .pytest-tmp-*/
 .pytest-task*/
 .coverage

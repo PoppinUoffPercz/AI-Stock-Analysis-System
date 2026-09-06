@@ -8,8 +8,8 @@ BOT_ROOT = Path(__file__).resolve().parent
 if str(BOT_ROOT) not in sys.path:
     sys.path.insert(0, str(BOT_ROOT))
 
-import buffett_main as omaha_main
-import main as scion_main
+import buffett_main as omaha_main  # noqa: E402 - import legacy wrapper after test path setup
+import main as scion_main  # noqa: E402 - import legacy wrapper after test path setup
 
 
 def test_scion_build_parser_accepts_existing_commands() -> None:

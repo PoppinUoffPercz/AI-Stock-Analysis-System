@@ -11,12 +11,14 @@ Signals execute at the next bar's open. Real persisted data is the default; synt
 
 ## Install
 
-From this directory on PowerShell:
+From the repository root on PowerShell:
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+python -m pip install -e .
+python -m pip install -e "./backtest-engine[dev]"
+cd backtest-engine
 ```
 
 ## Offline Acceptance Demo
@@ -53,7 +55,9 @@ Successful normal runs write `result.json`, `manifest.json`, `metrics.json`, and
 ## Optional Replay
 
 ```powershell
-python -m pip install -e ".[execution]"
+cd ..
+python -m pip install -e "./backtest-engine[execution]"
+cd backtest-engine
 bte replay --strategy sma_cross --symbol DEMO --data-root demo-data --universe-csv tests/fixtures/offline_demo/universe.csv --cost zero
 ```
 

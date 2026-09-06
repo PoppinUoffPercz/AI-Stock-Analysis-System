@@ -19,9 +19,9 @@ jobs:
           cache: pip
       - name: Install the three CLI packages
         run: |
+          python -m pip install -e ".[dev]"
           python -m pip install -e "backtest-engine[dev]"
           python -m pip install -e scion-omaha-bots
-          python -m pip install -e ".[dev]"
       - name: Run root and Scion/Omaha tests
         run: python -m pytest tests scion-omaha-bots
       - name: Run full backtest-engine suite
@@ -80,5 +80,18 @@ jobs:
           --seed 42
           --cost zero
 
-      # TODO(packaging): add an installed-wheel CLI smoke once the legacy Scion/Omaha
-      # modules are packaged with the wrapper instead of resolved from the source tree.
+      - name: Build distributable wheels
+        shell: bash
+        run: >-
+          python -m pip wheel . ./backtest-engine ./scion-omaha-bots
+          --wheel-dir "$RUNNER_TEMP/wheels"
+          --no-deps
+
+      - name: Smoke-test installed Scion/Omaha wheel in isolation
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-smoke"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m pip install \
+            "$RUNNER_TEMP"/wheels/stock_analysis_system-*.whl \
+            "$RUNNER_TEMP"/wheels/scion_omaha_bots-*.whl
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -I scripts/wheel_smoke.py

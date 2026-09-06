@@ -16,11 +16,11 @@ import os
 import statistics
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 import yfinance as yf
-from entry_timing import assess
-from tracker import TRADES_FILE
+from scion_omaha_bots.entry_timing import assess
+from scion_omaha_bots.tracker import TRADES_FILE
+
+from stock_analysis.config import configured_outputs_root
 
 VAULT_PERF = os.path.join(os.path.expanduser("~"), "OneDrive", "Documents",
                           "Obsidian Vault", "Stock Research", "Performance")
@@ -125,19 +125,23 @@ def main():
     L.append("## 3. Timing delta vs realized PnL")
     L.append(f"- Deltas: {deltas}")
     L.append(f"- Range {min(deltas)}…{max(deltas)} | mean {statistics.mean(deltas):+.1f} | median {statistics.median(deltas):+.1f}")
-    pos = [r for r in rows if r["delta"] > 0]; neg = [r for r in rows if r["delta"] < 0]; zer = [r for r in rows if r["delta"] == 0]
+    pos = [r for r in rows if r["delta"] > 0]
+    neg = [r for r in rows if r["delta"] < 0]
+    zer = [r for r in rows if r["delta"] == 0]
     L.append(f"- Positive-delta trades: {len(pos)} (mean PnL {statistics.mean([r['pnl'] for r in pos]):+.2f}%) | "
              f"zero: {len(zer)} ({statistics.mean([r['pnl'] for r in zer]):+.2f}%) | "
              f"negative: {len(neg)} ({statistics.mean([r['pnl'] for r in neg]):+.2f}%)")
     if len(deltas) >= 3:
         try:
-            dm = statistics.mean(deltas); pm = statistics.mean([r["pnl"] for r in rows])
+            dm = statistics.mean(deltas)
+            pm = statistics.mean([r["pnl"] for r in rows])
             cov = sum((r["delta"] - dm) * (r["pnl"] - pm) for r in rows)
-            sd_d = statistics.pstdev(deltas); sd_p = statistics.pstdev([r["pnl"] for r in rows])
+            sd_d = statistics.pstdev(deltas)
+            sd_p = statistics.pstdev([r["pnl"] for r in rows])
             if sd_d and sd_p:
                 r_corr = cov / (len(rows) * sd_d * sd_p)
                 L.append(f"- Pearson r(delta, PnL) = **{r_corr:+.2f}** (n={n} — direction only, not significance)")
-        except Exception:
+        except Exception:  # noqa: BLE001,S110 - audit can continue without correlation
             pass
     L.append("")
 
@@ -158,7 +162,8 @@ def main():
     L.append("")
 
     # Regime mix
-    up = [r for r in rows if " > " in r["regime"]]; dn = [r for r in rows if "vs" in r["regime"]]
+    up = [r for r in rows if " > " in r["regime"]]
+    dn = [r for r in rows if "vs" in r["regime"]]
     L.append("## 5. Regime at entry (R6)")
     if up or dn:
         L.append(f"- Full uptrend (SPY > 50d > 200d): {len(up)} trades, mean PnL "
@@ -187,8 +192,9 @@ def main():
              "Phase 2 shadow mode: scores moved, nothing gated. Next: re-run after more shadow data accumulates.*")
 
     report = "\n".join(L)
-    os.makedirs(VAULT_PERF, exist_ok=True)
-    out = os.path.join(VAULT_PERF, f"{datetime.date.today().isoformat()} Shadow Audit.md")
+    output_dir = configured_outputs_root(VAULT_PERF)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out = output_dir / f"{datetime.date.today().isoformat()} Shadow Audit.md"
     with open(out, "w", encoding="utf-8") as f:
         f.write(report)
     print(f"audit saved: {out}")

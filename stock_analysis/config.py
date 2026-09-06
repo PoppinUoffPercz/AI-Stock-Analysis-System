@@ -49,3 +49,9 @@ class AppPaths:
         target[STATE_ROOT_ENV] = str(self.state_root)
         target[DATA_ROOT_ENV] = str(self.data_root)
         target[OUTPUTS_ROOT_ENV] = str(self.outputs_root)
+
+
+def configured_outputs_root(default: str | Path) -> Path:
+    """Return the configured output root, preserving a legacy fallback."""
+    configured = os.environ.get(OUTPUTS_ROOT_ENV)
+    return Path(configured) if configured else Path(default)

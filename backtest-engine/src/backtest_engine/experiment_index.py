@@ -37,7 +37,7 @@ class ExperimentIndex:
             "benchmark": benchmark,
         }
         line = canonical_json(record) + "\n"
-        with _LOCK, process_lock(self.path.with_suffix(self.path.suffix + '.lock')):
+        with _LOCK, process_lock(self.path.with_suffix(self.path.suffix + ".lock")):
             records = self._read_unlocked()
             existing = next(
                 (item for item in records if item.get("run_id") == manifest.run_id), None
@@ -49,7 +49,7 @@ class ExperimentIndex:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # Logical append-only JSONL, published in one replacement so a killed
             # writer cannot leave a truncated final record. Existing order is kept.
-            encoded = ''.join(canonical_json(item) + '\n' for item in records) + line
+            encoded = "".join(canonical_json(item) + "\n" for item in records) + line
             atomic_write_text(self.path, encoded)
 
     def get(self, run_id: str) -> dict[str, Any]:
@@ -59,7 +59,7 @@ class ExperimentIndex:
         return matches[0]
 
     def filter(self, **criteria: object) -> list[dict[str, Any]]:
-        with _LOCK, process_lock(self.path.with_suffix(self.path.suffix + '.lock')):
+        with _LOCK, process_lock(self.path.with_suffix(self.path.suffix + ".lock")):
             records = self._read_unlocked()
         return [
             item

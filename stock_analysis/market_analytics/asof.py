@@ -85,17 +85,25 @@ class PointInTimeStore:
             if snapshot.symbol == symbol
             and snapshot.dataset == dataset
             and snapshot.available_at <= decision_time
+            and snapshot.received_at <= decision_time
         ]
         if not candidates:
             return None
-        return max(
-            candidates,
-            key=lambda item: (
-                item.available_at,
-                item.observed_at,
-                item.revision_id,
-            ),
+        latest_key = max(
+            (item.available_at, item.observed_at, item.received_at)
+            for item in candidates
         )
+        latest = [
+            item
+            for item in candidates
+            if (item.available_at, item.observed_at, item.received_at) == latest_key
+        ]
+        if len(latest) != 1:
+            raise ValueError(
+                "ambiguous point-in-time revision ordering; distinct revisions share "
+                "available_at, observed_at, and received_at"
+            )
+        return latest[0]
 
     def _load_all(self) -> tuple[SnapshotEnvelope, ...]:
         directory = self.artifacts.root / self.artifacts.mode / "snapshots"

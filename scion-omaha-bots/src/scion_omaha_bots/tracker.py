@@ -49,11 +49,8 @@ def _ensure_file(path, headers):
 
 def _append_row(path, headers, row):
     _ensure_file(path, headers)
-    try:
-        with process_lock(f"{path}.lock"), open(path, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow(row)
-    except OSError as e:
-        print(f"  [tracker] Could not write: {e}")
+    with process_lock(f"{path}.lock"), open(path, "a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow(row)
 
 
 def _read_csv(path):
@@ -201,8 +198,7 @@ class Tracker:
             print(f"  [tracker] {ticker} not found in open positions.")
             return
 
-        pos = positions.pop(ticker)
-        self.save_open_positions(positions)
+        pos = positions[ticker]
 
         entry = pos["entry_price"]
         if exit_price is None:
@@ -243,6 +239,8 @@ class Tracker:
             pos.get("fill_vs_close", ""),
         ]
         _append_row(self.trades_file, TRADES_HEADERS, row)
+        positions.pop(ticker)
+        self.save_open_positions(positions)
 
         try:
             from scion_omaha_bots.report_card import compute_alpha_for_trade

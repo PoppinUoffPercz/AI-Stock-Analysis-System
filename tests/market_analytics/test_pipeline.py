@@ -13,6 +13,7 @@ from stock_analysis.market_analytics.levels import LevelDirection
 from stock_analysis.market_analytics.models import (
     AggressorSide,
     BarEvent,
+    CorporateActionEvent,
     InstrumentSpec,
     MetricStatus,
     Provenance,
@@ -402,6 +403,23 @@ def test_pipeline_rejects_credit_context_from_the_future():
 
     with pytest.raises(ValueError, match="future"):
         pipeline.set_credit_context(credit)
+
+
+def test_pipeline_rejects_unimplemented_corporate_actions_explicitly():
+    provider, instrument, config = build_full_fixture()
+    pipeline = AnalyticsPipeline(instrument, config, provider.capabilities)
+
+    with pytest.raises(NotImplementedError, match="corporate action"):
+        pipeline.consume(
+            CorporateActionEvent(
+                "AAA",
+                T0,
+                "fixture",
+                "actions",
+                "split",
+                2.0,
+            )
+        )
 
 
 def test_pipeline_attaches_typed_credit_observation_at_snapshot_time():

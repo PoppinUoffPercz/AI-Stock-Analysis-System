@@ -72,6 +72,26 @@ def test_receipt_wall_clock_does_not_change_deterministic_snapshot_identity(tmp_
     assert first_ref.identity == later_ref.identity
 
 
+def test_asof_store_does_not_select_snapshot_before_local_receipt(tmp_path):
+    delayed = _snapshot(
+        revision="r1", available_minutes=2, value=10.0, received_minutes=20
+    )
+    store = PointInTimeStore(tmp_path)
+    store.ingest(delayed)
+
+    assert store.as_of("AAA", "fundamentals", T0 + timedelta(minutes=3)) is None
+    assert store.as_of("AAA", "fundamentals", T0 + timedelta(minutes=21)) == delayed
+
+
+def test_asof_store_rejects_ambiguous_same_time_revisions(tmp_path):
+    store = PointInTimeStore(tmp_path)
+    store.ingest(_snapshot(revision="9", available_minutes=2, value=9.0))
+    store.ingest(_snapshot(revision="10", available_minutes=2, value=10.0))
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        store.as_of("AAA", "fundamentals", T0 + timedelta(minutes=3))
+
+
 def test_snapshot_envelope_rejects_impossible_provider_timing():
     with pytest.raises(ValueError, match="received_at"):
         replace(

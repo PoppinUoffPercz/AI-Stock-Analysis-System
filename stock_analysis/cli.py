@@ -215,23 +215,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         _apply_global_paths(raw_args, namespace_index)
         namespace = raw_args[namespace_index]
         domain_args = raw_args[namespace_index + 1 :]
-        if namespace == "scion":
-            return _result_code(_run_scion(domain_args))
-        if namespace == "omaha":
-            return _result_code(_run_omaha(domain_args))
-        if namespace == "portfolio":
-            return _result_code(_run_portfolio(domain_args))
-        if namespace == "tracking":
-            return _result_code(_run_tracking(domain_args))
-        if namespace == "credit":
-            return _result_code(_run_credit(domain_args))
-        if namespace == "debate":
-            return _result_code(_run_debate(domain_args))
-        if namespace == "research":
-            return _result_code(_run_research(domain_args))
-        if namespace == "intelligence":
-            return _result_code(_run_intelligence(domain_args))
-        return _result_code(_run_backtest(domain_args))
+        runner = {
+            "scion": _run_scion,
+            "omaha": _run_omaha,
+            "portfolio": _run_portfolio,
+            "tracking": _run_tracking,
+            "credit": _run_credit,
+            "debate": _run_debate,
+            "research": _run_research,
+            "intelligence": _run_intelligence,
+        }.get(namespace, _run_backtest)
+        return _result_code(runner(domain_args))
 
     parser = build_parser()
     args = parser.parse_args(raw_args)

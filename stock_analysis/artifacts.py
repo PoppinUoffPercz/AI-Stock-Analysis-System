@@ -130,7 +130,7 @@ class ArtifactStore:
         expected_identity: str | None = None,
     ) -> None:
         if not isinstance(envelope, dict):
-            raise ValueError("artifact envelope must be an object")
+            raise TypeError("artifact envelope must be an object")
         if envelope.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported artifact schema version")
         if envelope.get("kind") != expected_kind:

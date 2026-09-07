@@ -271,9 +271,9 @@ class StooqSource(Source):
     def _date_params(start: str | None, end: str | None) -> dict[str, str]:
         d: dict[str, str] = {}
         if start:
-            d["d1"] = pd.Timestamp(start).strftime("%Y%m%d")
+            d["d1"] = utc_day(start).strftime("%Y%m%d")
         if end:
-            d["d2"] = pd.Timestamp(end).strftime("%Y%m%d")
+            d["d2"] = utc_day(end).strftime("%Y%m%d")
         return d
 
     @staticmethod

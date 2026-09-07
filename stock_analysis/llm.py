@@ -54,9 +54,9 @@ class LLMEvidenceBundle:
         identity = experiment.get("identity_hash")
         strategy = experiment.get("strategy")
         if not isinstance(run_id, str) or not isinstance(identity, str):
-            raise ValueError("LLM evidence requires indexed run_id and identity_hash")
+            raise TypeError("LLM evidence requires indexed run_id and identity_hash")
         if strategy is not None and not isinstance(strategy, str):
-            raise ValueError("LLM evidence strategy must be a string when present")
+            raise TypeError("LLM evidence strategy must be a string when present")
         if review.run_id != run_id or review.experiment_identity != identity:
             raise ValueError("LLM evidence identities do not match the review proposal")
         if attribution.run_id != run_id:
@@ -142,9 +142,7 @@ class ReadOnlyLLMOrchestrator:
             return LLMResult(
                 LLMResultStatus.UNAVAILABLE, reason="model provider timed out"
             )
-        except (
-            Exception
-        ) as exc:  # provider failures are isolated from deterministic workflows
+        except Exception as exc:  # noqa: BLE001 - isolate arbitrary provider failures
             return LLMResult(
                 LLMResultStatus.UNAVAILABLE,
                 reason=f"model provider failed: {type(exc).__name__}",

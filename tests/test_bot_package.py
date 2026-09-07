@@ -37,11 +37,7 @@ def test_bot_package_exports_stable_runner_seams(monkeypatch) -> None:
         def main(argv):
             return 7 if argv == ["--probe"] else 0
 
-    monkeypatch.setattr(
-        runners,
-        "_load_legacy_entrypoint",
-        lambda filename, module_name: FakeEntrypoint,
-    )
+    monkeypatch.setattr(runners, "import_module", lambda module_name: FakeEntrypoint)
 
     assert runners.scion_main(["--probe"]) == 7
     assert runners.omaha_main(["--probe"]) == 7

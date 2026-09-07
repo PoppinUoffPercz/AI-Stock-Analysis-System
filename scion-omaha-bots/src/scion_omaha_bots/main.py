@@ -21,6 +21,17 @@ import argparse
 import datetime
 from collections.abc import Sequence
 
+from scion_omaha_bots.shared_commands import (
+    cmd_daily_check,
+    cmd_feedback,
+    cmd_log_exit,
+    cmd_report,
+    cmd_tracker,
+)
+from scion_omaha_bots.shared_commands import (
+    cmd_log_entry as _shared_log_entry,
+)
+
 # Ensure local imports work regardless of CWD
 
 DEFAULT_WATCHLIST = [
@@ -494,54 +505,7 @@ def cmd_premarket(args):
 
 def cmd_log_entry(args):
     """Log a trade entry to the performance tracker."""
-    from scion_omaha_bots.tracker import Tracker
-    t = Tracker()
-    t.log_entry(
-        ticker=args.symbol, bot="scion", entry_price=args.entry,
-        stop_loss=args.stop, target1=args.t1, target2=args.t2,
-        score=args.score, thesis=args.thesis
-    )
-
-
-def cmd_log_exit(args):
-    """Log a trade exit to the performance tracker."""
-    from scion_omaha_bots.tracker import Tracker
-    t = Tracker()
-    t.log_exit(ticker=args.symbol, exit_price=args.exit, exit_reason=args.reason)
-
-
-def cmd_report(args):
-    """Generate performance report and save to vault."""
-    from scion_omaha_bots.report_card import cmd_report as rc
-    rc(bot=args.bot)
-
-
-def cmd_feedback(args):
-    """Generate strategy feedback with interactive apply."""
-    from scion_omaha_bots.feedback import cmd_feedback as fb
-    fb(interactive=not args.no_interactive)
-
-
-def cmd_daily_check(args):
-    """Daily position monitor — logs snapshot and writes vault brief."""
-    from scion_omaha_bots.daily_check import cmd_check as dc
-    dc()
-
-
-def cmd_tracker(args):
-    """Tracker status: show all open positions."""
-    from scion_omaha_bots.tracker import Tracker
-    t = Tracker()
-    open_pos = t.get_open_positions_summary()
-    if not open_pos:
-        print("  No open positions.")
-        return
-    print(f"\n  {'Ticker':<8} {'Bot':<8} {'Entry':>8} {'Current':>9} {'P&L%':>7} {'Days':>5} {'StopDist%':>10} {'T1Dist%':>9} {'Score':>5}")
-    print("  " + "-" * 75)
-    for p in open_pos:
-        sd = f"{p['distance_to_stop_pct']:+.1f}%" if p["distance_to_stop_pct"] is not None else "N/A"
-        td = f"{p['distance_to_target1_pct']:+.1f}%" if p["distance_to_target1_pct"] is not None else "N/A"
-        print(f"  {p['ticker']:<8} {p['bot']:<8} ${p['entry_price']:<6.2f} ${p['current_price']:<7.2f} {p['pnl_pct']:+.2f}% {p['days_held']:>4}d {sd:>9} {td:>8} {p['score']:>5}")
+    _shared_log_entry(args, bot="scion")
 
 
 def build_parser():

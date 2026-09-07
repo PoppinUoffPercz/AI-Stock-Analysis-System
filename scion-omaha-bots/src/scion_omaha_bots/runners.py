@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-
-from ._legacy import load_entrypoint as _load_legacy_entrypoint
+from importlib import import_module
 
 
 def _result_code(result: object) -> int:
@@ -12,12 +11,10 @@ def _result_code(result: object) -> int:
 
 
 def scion_main(argv: Sequence[str] | None = None) -> int:
-    module = _load_legacy_entrypoint("main.py", "scion_omaha_bots._legacy_scion_main")
+    module = import_module("scion_omaha_bots.main")
     return _result_code(module.main(argv))
 
 
 def omaha_main(argv: Sequence[str] | None = None) -> int:
-    module = _load_legacy_entrypoint(
-        "buffett_main.py", "scion_omaha_bots._legacy_omaha_main"
-    )
+    module = import_module("scion_omaha_bots.buffett_main")
     return _result_code(module.main(argv))

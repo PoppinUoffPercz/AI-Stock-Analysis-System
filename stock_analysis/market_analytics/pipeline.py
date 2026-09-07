@@ -178,7 +178,9 @@ class AnalyticsPipeline:
                 self._last_session_event_at = event.timestamp
             self.dom.apply(event)
         elif isinstance(event, CorporateActionEvent):
-            pass
+            raise NotImplementedError(
+                "corporate action events are not yet applied by the analytics pipeline"
+            )
         else:
             raise TypeError(f"unsupported analytics event: {type(event).__name__}")
         return self._snapshot(event.timestamp)

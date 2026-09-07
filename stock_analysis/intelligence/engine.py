@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from math import floor, sqrt, tanh
+from typing import ClassVar
 
 from stock_analysis.market_analytics.features import FeatureRecord
 from stock_analysis.market_analytics.models import MetricStatus
@@ -15,8 +16,8 @@ from .models import (
     PendingOrderState,
     PortfolioRiskContext,
     PortfolioState,
-    PositionState,
     PositionRequest,
+    PositionState,
     RegimeAssessment,
     RegimeLabel,
     RegimePolicyConfig,
@@ -179,7 +180,7 @@ class RegimeEngine:
 
 
 class ScreeningEngine:
-    _unsupported = {
+    _unsupported: ClassVar[dict[str, str]] = {
         OpportunityFamily.BREAKOUT.value: "separate breakout evidence needs point-in-time historical normalization",
         OpportunityFamily.FUNDAMENTAL_VALUE.value: "canonical point-in-time fundamental features are not in FeatureRecord yet",
         OpportunityFamily.OPTIONS_VOLATILITY.value: "options analytics exist but strategy lifecycle/payoff eligibility is not canonical yet",

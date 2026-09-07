@@ -456,6 +456,18 @@ def test_stooq_date_params_keep_inclusive_end_date():
     }
 
 
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        ("2024-01-01T12:34:56", None),
+        (None, "2024-01-02T12:34:56"),
+    ],
+)
+def test_stooq_date_params_reject_non_date_bounds(start, end):
+    with pytest.raises(ValueError, match="expected YYYY-MM-DD"):
+        StooqSource._date_params(start, end)
+
+
 # ---------------------------------------------------------------------------
 # Universe as-of + survivorship
 # ---------------------------------------------------------------------------

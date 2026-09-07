@@ -50,6 +50,8 @@ def run_spec(
     relevant_args: dict[str, Any] | None = None,
     dataset_identity: dict[str, Any] | None = None,
     signal_ohlc: pd.DataFrame | None = None,
+    intelligence_refs: dict[str, Any] | None = None,
+    execution_assumptions: dict[str, Any] | None = None,
 ) -> BacktestResult:
     """Execute `spec` through `engine`, optionally enforcing point-in-time membership."""
     active_universe = None
@@ -119,5 +121,7 @@ def run_spec(
         random_seed=random_seed,
         relevant_args=relevant_args,
         dataset_identity=dataset_identity,
+        intelligence_refs=intelligence_refs,
+        execution_assumptions=execution_assumptions,
     )
     return result

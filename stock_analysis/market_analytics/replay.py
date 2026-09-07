@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
@@ -29,7 +30,7 @@ class ReplayProvider:
         capabilities: CapabilityRegistry,
         provider: str = "fixture",
     ) -> None:
-        self._events = tuple(events)
+        self._events = tuple(sorted(events, key=lambda event: event.timestamp))
         self.capabilities = capabilities
         self.provider = provider
         for event in self._events:
@@ -79,12 +80,28 @@ class ReplayConsumer(Protocol):
     def finalize(self, as_of: datetime) -> object | None: ...
 
 
+@dataclass(slots=True)
+class ReplayClock:
+    """Controllable UTC clock that can only move forward during replay."""
+
+    current: datetime | None = None
+
+    def advance(self, timestamp: datetime) -> datetime:
+        _require_utc(timestamp, "replay clock timestamp")
+        if self.current is not None and timestamp < self.current:
+            raise ValueError("replay clock cannot move backwards")
+        self.current = timestamp
+        return timestamp
+
+
 class ReplayEngine:
     def run(
         self,
         provider: ReplayProvider,
         consumer: ReplayConsumer,
         symbol: str,
+        *,
+        clock: ReplayClock | None = None,
     ) -> tuple[object, ...]:
         consume = getattr(consumer, "consume", None)
         finalize = getattr(consumer, "finalize", None)
@@ -94,8 +111,10 @@ class ReplayEngine:
             )
 
         events = tuple(provider.events(symbol))
+        replay_clock = clock or ReplayClock()
         snapshots: list[object] = []
         for event in events:
+            replay_clock.advance(event.timestamp)
             result = consume(event)
             if result is not None:
                 snapshots.append(result)

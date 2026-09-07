@@ -156,6 +156,7 @@ def build_feature_record(snapshot: AnalyticsSnapshot) -> FeatureRecord:
         add_unavailable("rv_20d", "volatility state is unavailable")
         add_unavailable("event_volatility", "volatility state is unavailable")
 
+    _add_market_structure_features(snapshot, values, metadata, add_unavailable)
     _add_level_distances(snapshot, values, metadata, add_unavailable)
     _add_confluence_features(snapshot, values, metadata, add_unavailable)
     _add_credit_features(snapshot, values, metadata, add_unavailable, categories)
@@ -171,6 +172,78 @@ def build_feature_record(snapshot: AnalyticsSnapshot) -> FeatureRecord:
         metadata=metadata,
         categories=categories,
     )
+
+
+def _add_market_structure_features(
+    snapshot: AnalyticsSnapshot,
+    values: dict[str, float | None],
+    metadata: dict[str, MetricMetadata],
+    add_unavailable: Any,
+) -> None:
+    for name in (
+        "midprice",
+        "spread_bps",
+        "book_imbalance_l5",
+        "distance_weighted_imbalance",
+        "microprice_minus_mid_bps",
+    ):
+        add(name, snapshot.dom.metrics.get(name), values, metadata, snapshot.as_of)
+
+    for name in (
+        "session_vwap",
+        "distance_from_vwap_bps",
+        "vwap_zscore",
+        "vwap_slope",
+    ):
+        add(name, snapshot.vwap.metrics.get(name), values, metadata, snapshot.as_of)
+
+    add("flow_delta", snapshot.flow.flow_delta, values, metadata, snapshot.as_of)
+    add("cvd", snapshot.flow.cvd, values, metadata, snapshot.as_of)
+    add("flow_quality", snapshot.flow.quality, values, metadata, snapshot.as_of)
+
+    exhaustion = snapshot.flow.exhaustion
+    if exhaustion is None:
+        add_unavailable("bullish_exhaustion_score", "flow exhaustion is unavailable")
+        add_unavailable("bearish_exhaustion_score", "flow exhaustion is unavailable")
+    else:
+        add(
+            "bullish_exhaustion_score",
+            exhaustion.bullish_exhaustion_score,
+            values,
+            metadata,
+            snapshot.as_of,
+        )
+        add(
+            "bearish_exhaustion_score",
+            exhaustion.bearish_exhaustion_score,
+            values,
+            metadata,
+            snapshot.as_of,
+        )
+
+    profile = (
+        snapshot.profiles.get("volume")
+        if isinstance(snapshot.profiles, Mapping)
+        else None
+    )
+    if profile is None:
+        for name in ("volume_poc", "volume_vah", "volume_val"):
+            add_unavailable(name, "volume profile is unavailable")
+        return
+
+    profile_metadata = getattr(profile, "metadata", None)
+    if not isinstance(profile_metadata, MetricMetadata):
+        for name in ("volume_poc", "volume_vah", "volume_val"):
+            add_unavailable(name, "volume profile metadata is unavailable")
+        return
+    _check_not_future(profile_metadata, snapshot.as_of, "volume_profile")
+    for name, value in (
+        ("volume_poc", getattr(profile, "vpoc", None)),
+        ("volume_vah", getattr(profile, "vah", None)),
+        ("volume_val", getattr(profile, "val", None)),
+    ):
+        values[name] = value
+        metadata[name] = profile_metadata
 
 
 def _preferred_skew(state: VolatilityState) -> SkewState | None:

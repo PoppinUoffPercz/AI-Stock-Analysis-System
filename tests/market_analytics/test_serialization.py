@@ -52,5 +52,7 @@ def test_snapshot_json_wire_round_trip_preserves_status_and_provenance_types():
 
 
 def test_json_cannot_resolve_classes_outside_analytics():
-    with pytest.raises(ValueError, match='unsupported serialized type'):
-        from_jsonable({'__type__': 'subprocess:Popen', 'fields': {'args': ['never-run']}})
+    with pytest.raises(ValueError, match="unsupported serialized type"):
+        from_jsonable(
+            {"__type__": "subprocess:Popen", "fields": {"args": ["never-run"]}}
+        )

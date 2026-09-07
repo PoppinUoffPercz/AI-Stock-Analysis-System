@@ -18,6 +18,9 @@ from .models import (
 
 @dataclass(frozen=True, slots=True)
 class CapabilityRegistry:
+    supports_bars: bool = False
+    supports_trades: bool = False
+    supports_bbo: bool = False
     supports_l2: bool = False
     supports_mbo: bool = False
     supports_trade_side: bool = False
@@ -31,6 +34,12 @@ class CapabilityRegistry:
     supports_option_volume: bool = False
     supports_option_bid_ask: bool = False
     supports_intraday_options: bool = False
+    coverage_scope: str = "unknown"
+    supports_historical: bool = False
+    supports_streaming: bool = False
+    supports_rates: bool = False
+    supports_dividends: bool = False
+    supports_borrow: bool = False
 
 
 class MarketDataProvider(Protocol):

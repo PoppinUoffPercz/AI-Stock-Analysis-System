@@ -100,19 +100,39 @@ def _resolve_type(path: str) -> type[Any]:
     module_name, separator, qualified_name = path.partition(":")
     if not separator:
         raise ValueError(f"invalid serialized type path: {path}")
-    allowed_modules = {
-        'config', 'credit', 'dom', 'features', 'levels', 'models', 'options',
-        'order_flow', 'pipeline', 'positioning', 'profiles', 'providers', 'sessions', 'volatility', 'vwap',
+    allowed_market_modules = {
+        "config",
+        "asof",
+        "credit",
+        "dom",
+        "features",
+        "levels",
+        "models",
+        "options",
+        "order_flow",
+        "pipeline",
+        "positioning",
+        "profiles",
+        "providers",
+        "sessions",
+        "streaming",
+        "volatility",
+        "vwap",
     }
-    if (not module_name.startswith('stock_analysis.market_analytics.')
-            or module_name.rsplit('.', 1)[-1] not in allowed_modules
-            or '.' in qualified_name):
-        raise ValueError(f'unsupported serialized type: {path}')
+    market_type = module_name.startswith("stock_analysis.market_analytics.") and (
+        module_name.rsplit(".", 1)[-1] in allowed_market_modules
+    )
+    intelligence_type = module_name == "stock_analysis.intelligence.models"
+    paper_type = module_name == "stock_analysis.paper"
+    if (
+        not market_type and not intelligence_type and not paper_type
+    ) or "." in qualified_name:
+        raise ValueError(f"unsupported serialized type: {path}")
     resolved: Any = importlib.import_module(module_name)
     for name in qualified_name.split("."):
         resolved = getattr(resolved, name)
     if not isinstance(resolved, type):
         raise TypeError(f"serialized path does not resolve to a type: {path}")
     if not (is_dataclass(resolved) or issubclass(resolved, Enum)):
-        raise ValueError(f'unsupported serialized type: {path}')
+        raise ValueError(f"unsupported serialized type: {path}")
     return resolved

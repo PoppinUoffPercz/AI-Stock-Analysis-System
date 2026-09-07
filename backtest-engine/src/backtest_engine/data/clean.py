@@ -33,8 +33,8 @@ def validate_clean(df: pd.DataFrame, *, source: str) -> pd.DataFrame:
     Optional columns are filled with sensible defaults if missing.
 
     Raises:
-      CleanError: on missing required columns, NaN in OHLC, OHLC invariant violation,
-                  non-monotonic timestamps, duplicate timestamps.
+      CleanError: on missing required columns, non-finite market-data values,
+                  OHLC invariant violation, non-monotonic timestamps, duplicate timestamps.
     """
     required = ("timestamp", "open", "high", "low", "close", "volume")
     missing = [c for c in required if c not in df.columns]
@@ -77,18 +77,29 @@ def validate_clean(df: pd.DataFrame, *, source: str) -> pd.DataFrame:
     if "split_ratio" not in d.columns:
         d["split_ratio"] = 1.0
 
-    # NaN in OHLC within active rows is a hard error.
-    ohlc = d[["open", "high", "low", "close"]]
-    if ohlc.isna().any().any():
-        raise CleanError("NaN in OHLC")
-    adjusted_ohlc = d[["adj_open", "adj_high", "adj_low", "adj_close"]].apply(
-        pd.to_numeric, errors="coerce"
+    raw_ohlc_columns = ["open", "high", "low", "close"]
+    adjusted_ohlc_columns = ["adj_open", "adj_high", "adj_low", "adj_close"]
+    numeric_columns = (
+        *raw_ohlc_columns,
+        *adjusted_ohlc_columns,
+        "volume",
+        "dividend",
+        "split_ratio",
     )
-    if adjusted_ohlc.isna().any().any() or not np.isfinite(adjusted_ohlc.to_numpy()).all():
-        raise CleanError("invalid adjusted OHLC")
+    for column in numeric_columns:
+        d[column] = pd.to_numeric(d[column], errors="coerce")
 
-    # Volume can be NaN for some sources; coerce to 0.
-    d["volume"] = d["volume"].fillna(0)
+    # Volume can be missing for some sources; coerce only missing volume to 0.
+    d["volume"] = d["volume"].fillna(0.0)
+    for columns, label in (
+        (raw_ohlc_columns, "raw OHLC"),
+        (adjusted_ohlc_columns, "adjusted OHLC"),
+        (["volume"], "volume"),
+        (["dividend"], "dividend"),
+        (["split_ratio"], "split_ratio"),
+    ):
+        if not np.isfinite(d[columns].to_numpy(dtype=float)).all():
+            raise CleanError(f"invalid {label}")
 
     # Sanity invariants (plan 4.3 step 1).
     for inv in OHLC_INVARIANTS:

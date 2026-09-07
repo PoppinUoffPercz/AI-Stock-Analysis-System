@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from backtest_engine.pipeline.discovery import run_spec
-from backtest_engine.reproducibility import RunManifest, dataframe_sha256
+from backtest_engine.reproducibility import RunManifest, build_manifest, dataframe_sha256
 from backtest_engine.strategy.spec import StrategySpec
 
 
@@ -91,6 +91,40 @@ def test_manifest_identity_excludes_run_id_and_timestamp_but_covers_inputs(monke
         first.manifest.stable["params"]["window"] = 10
     with pytest.raises(FrozenInstanceError):
         first.manifest.identity_hash = "changed"
+
+
+def test_manifest_identity_covers_intelligence_and_execution_assumptions():
+    common = {
+        "strategy_name": "demo",
+        "signal_factory": None,
+        "engine": "vectorbt",
+        "params": {},
+        "capital": 10_000.0,
+        "cost_model": "zero",
+        "universe_ref": "fixture",
+        "ohlc": _ohlc(),
+        "intelligence_refs": {
+            "analytics": "snapshot-a",
+            "regime_policy": "regime-v1",
+            "screen_config": "screen-v1",
+            "risk_policy": "risk-v1",
+        },
+        "execution_assumptions": {"decision_to_order_ms": 25, "fill_model": "next_bar_open"},
+    }
+    first = build_manifest(run_id="one", **common)
+    same = build_manifest(run_id="two", **common)
+    changed = build_manifest(
+        run_id="three",
+        **{
+            **common,
+            "intelligence_refs": {**common["intelligence_refs"], "analytics": "snapshot-b"},
+        },
+    )
+
+    assert first.identity_hash == same.identity_hash
+    assert first.identity_hash != changed.identity_hash
+    assert first.stable["intelligence"]["analytics"] == "snapshot-a"
+    assert first.stable["execution_assumptions"]["fill_model"] == "next_bar_open"
 
 
 def test_signal_warmup_does_not_change_execution_data_hash(monkeypatch):

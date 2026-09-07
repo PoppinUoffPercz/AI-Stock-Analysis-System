@@ -100,7 +100,11 @@ class BuffettPortfolioManager:
                 total_cash = info.get("totalCash") or 0
                 intrinsic_equity = sum_pv_oe + pv_tv + total_cash - total_debt
                 intrinsic_per_share = intrinsic_equity / shares
-                margin_of_safety = (intrinsic_per_share - current_price) / intrinsic_per_share
+                margin_of_safety = (
+                    (intrinsic_per_share - current_price) / intrinsic_per_share
+                    if intrinsic_per_share > 0
+                    else -1.0
+                )
                 return {
                     "intrinsic_value": round(intrinsic_per_share, 2),
                     "current_price": round(current_price, 2),
@@ -129,12 +133,23 @@ class BuffettPortfolioManager:
             alloc_amount = self.cash
             if alloc_amount <= 0:
                 return {"action": "REJECTED", "reason": "Insufficient cash"}
+        if alloc_amount < self.capital * self.min_position_pct:
+            return {
+                "action": "REJECTED",
+                "reason": f"Available allocation is below min {self.min_position_pct * 100:.0f}%",
+            }
 
         shares = int(alloc_amount / entry_price)
         if shares <= 0:
             return {"action": "REJECTED", "reason": "Allocation too small for 1 share"}
 
         cost = shares * entry_price
+        actual_allocation_pct = cost / self.capital
+        if actual_allocation_pct < self.min_position_pct:
+            return {
+                "action": "REJECTED",
+                "reason": f"Whole-share allocation is below min {self.min_position_pct * 100:.0f}%",
+            }
         self.cash -= cost
 
         self.positions[symbol] = {
@@ -145,6 +160,7 @@ class BuffettPortfolioManager:
             "last_known_intrinsic": intrinsic_value,
             "buffett_score": buffett_score,
             "reasons": reasons,
+            "position_pct": actual_allocation_pct,
             "opened_date": datetime.datetime.now().isoformat(),
             "status": "HOLD",
             "thesis_intact": True,
@@ -170,7 +186,7 @@ class BuffettPortfolioManager:
             "shares": shares,
             "price": entry_price,
             "cost": round(cost, 2),
-            "allocation_pct": round(allocation_pct * 100, 1),
+            "allocation_pct": round(actual_allocation_pct * 100, 1),
             "intrinsic_value": intrinsic_value,
             "buffett_score": buffett_score
         }
@@ -202,13 +218,18 @@ class BuffettPortfolioManager:
             if margin < -0.50:
                 pos["valuation_warnings"] = pos.get("valuation_warnings", 0) + 1
                 if pos["valuation_warnings"] >= 3:
+                    intrinsic_value = iv["intrinsic_value"]
                     actions.append({
                         "action": "WARNING",
                         "symbol": symbol,
-                        "message": f"Price ({iv['current_price']}) far exceeds intrinsic ({iv['intrinsic_value']}) for {pos['valuation_warnings']} consecutive checks — consider trimming",
+                        "message": f"Price ({iv['current_price']}) far exceeds intrinsic ({intrinsic_value}) for {pos['valuation_warnings']} consecutive checks — consider trimming",
                         "current_price": iv["current_price"],
-                        "intrinsic_value": iv["intrinsic_value"],
-                        "premium_pct": round((iv["current_price"] / iv["intrinsic_value"] - 1) * 100, 1)
+                        "intrinsic_value": intrinsic_value,
+                        "premium_pct": (
+                            round((iv["current_price"] / intrinsic_value - 1) * 100, 1)
+                            if intrinsic_value > 0
+                            else None
+                        )
                     })
             else:
                 pos["valuation_warnings"] = 0
@@ -271,6 +292,11 @@ class BuffettPortfolioManager:
         realized_pnl = proceeds - cost_basis_sold
         pos["cost_basis"] -= cost_basis_sold
         pos["shares"] -= shares_to_sell
+        pos["position_pct"] = pos["cost_basis"] / self.capital
+        if pos["shares"] == 0:
+            pos["cost_basis"] = 0.0
+            pos["position_pct"] = 0.0
+            self.positions.pop(symbol)
         self.cash += proceeds
 
         trade = {

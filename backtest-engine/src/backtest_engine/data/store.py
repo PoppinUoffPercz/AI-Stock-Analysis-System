@@ -14,6 +14,7 @@ from typing import Final
 
 import pandas as pd
 
+from backtest_engine.data.dates import utc_day
 from backtest_engine.identifiers import validate_identifier
 
 # Canonical clean schema (plan section 4.2)
@@ -98,8 +99,10 @@ def read_clean(
         return pd.DataFrame(columns=CLEAN_COLUMNS)
 
     parts: list[pd.DataFrame] = []
-    start_year = pd.Timestamp(start).year if start else None
-    end_year = pd.Timestamp(end).year if end else None
+    start_day = utc_day(start) if start else None
+    end_day = utc_day(end) if end else None
+    start_year = start_day.year if start_day is not None else None
+    end_year = end_day.year if end_day is not None else None
     for p in sorted(sym_dir.glob("*.parquet")):
         year = int(p.stem)
         if start_year is not None and year < start_year:
@@ -110,8 +113,8 @@ def read_clean(
     if not parts:
         return pd.DataFrame(columns=CLEAN_COLUMNS)
     df = pd.concat(parts, ignore_index=True).sort_values("timestamp")
-    if start:
-        df = df[df["timestamp"] >= pd.Timestamp(start, tz=TIMESTAMP_TZ)]
-    if end:
-        df = df[df["timestamp"] <= pd.Timestamp(end, tz=TIMESTAMP_TZ)]
+    if start_day is not None:
+        df = df[df["timestamp"] >= start_day]
+    if end_day is not None:
+        df = df[df["timestamp"] < end_day + pd.Timedelta(days=1)]
     return df.reset_index(drop=True)

@@ -113,6 +113,16 @@ class ScionPortfolioManager:
             positive_number(value, field)
         if position_pct is not None:
             positive_number(position_pct, 'position_pct', maximum=1)
+            if position_pct < self.min_position_pct:
+                return {
+                    "action": "REJECTED",
+                    "reason": f"Position allocation is below min {self.min_position_pct * 100:.0f}%",
+                }
+            if position_pct > self.max_position_pct:
+                return {
+                    "action": "REJECTED",
+                    "reason": f"Position allocation exceeds max {self.max_position_pct * 100:.0f}%",
+                }
         if len(self.positions) >= self.max_positions:
             return {"action": "REJECTED", "reason": "Max positions reached (18)"}
 
@@ -122,22 +132,36 @@ class ScionPortfolioManager:
         if position_pct is None:
             position_pct = self.max_position_pct
 
-        dd = self._portfolio_drawdown_at_stops(entry_price, stop_loss, position_pct)
-        if dd > self.max_drawdown_pct:
-            return {"action": "REJECTED",
-                    "reason": f"Portfolio drawdown at stops would be {dd*100:.1f}% (max {self.max_drawdown_pct*100:.0f}%)"}
-
         alloc_amount = self.capital * position_pct
         if alloc_amount > self.cash:
             alloc_amount = self.cash
             if alloc_amount <= 0:
                 return {"action": "REJECTED", "reason": "Insufficient cash"}
+        if alloc_amount < self.capital * self.min_position_pct:
+            return {
+                "action": "REJECTED",
+                "reason": f"Available allocation is below min {self.min_position_pct * 100:.0f}%",
+            }
 
         shares = int(alloc_amount / entry_price)
         if shares <= 0:
             return {"action": "REJECTED", "reason": "Allocation too small for 1 share"}
 
         cost = shares * entry_price
+        actual_position_pct = cost / self.capital
+        if actual_position_pct < self.min_position_pct:
+            return {
+                "action": "REJECTED",
+                "reason": f"Whole-share allocation is below min {self.min_position_pct * 100:.0f}%",
+            }
+
+        dd = self._portfolio_drawdown_at_stops(
+            entry_price, stop_loss, actual_position_pct
+        )
+        if dd > self.max_drawdown_pct:
+            return {"action": "REJECTED",
+                    "reason": f"Portfolio drawdown at stops would be {dd*100:.1f}% (max {self.max_drawdown_pct*100:.0f}%)"}
+
         self.cash -= cost
 
         self.positions[symbol] = {
@@ -149,7 +173,7 @@ class ScionPortfolioManager:
             "target_2": target_2,
             "score": score,
             "reasons": reasons,
-            "position_pct": position_pct,
+            "position_pct": actual_position_pct,
             "opened_date": datetime.datetime.now().isoformat(),
             "status": "OPEN",
             "partial_exit_done": False
@@ -280,7 +304,13 @@ class ScionPortfolioManager:
         realized_pnl = proceeds - cost_basis_sold
         pos["cost_basis"] -= cost_basis_sold
         pos["shares"] -= shares_to_sell
-        pos["partial_exit_done"] = True
+        pos["position_pct"] = pos["cost_basis"] / self.capital
+        if pos["shares"] == 0:
+            pos["cost_basis"] = 0.0
+            pos["position_pct"] = 0.0
+            self.positions.pop(symbol)
+        else:
+            pos["partial_exit_done"] = True
         self.cash += proceeds
 
         trade = {

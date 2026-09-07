@@ -192,6 +192,9 @@ def cmd_add(args):
     print(f"\nPosition opened: {result}")
     print(f"\n{pm.get_portfolio_summary()}")
 
+    if result.get("action") != "BOUGHT":
+        return
+
     if args.notify:
         notifier = ScionNotifier(recipient_id=args.recipient)
         body = f"Opened {result['shares']} shares of {args.symbol} @ ${entry}\nStop: ${stop_loss} | T1: ${target_1} | T2: ${target_2}"

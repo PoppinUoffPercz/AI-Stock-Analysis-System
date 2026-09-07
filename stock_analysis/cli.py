@@ -21,6 +21,7 @@ NAMESPACES = {
     "credit",
     "debate",
     "research",
+    "intelligence",
 }
 GLOBAL_PATH_OPTIONS = {"--state-root", "--data-root", "--outputs-root"}
 
@@ -56,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("credit", "Run credit-monitor commands"),
         ("debate", "Run Bull/Bear/Judge debate commands"),
         ("research", "Run one selected research bot"),
+        ("intelligence", "Run deterministic intelligence workflows"),
     ):
         subparsers.add_parser(name, help=help_text)
 
@@ -161,6 +163,18 @@ def _run_research(domain_args: list[str]) -> int:
     return _run_shared("research_main", domain_args)
 
 
+def _run_intelligence(domain_args: list[str]) -> int:
+    try:
+        module = importlib.import_module("stock_analysis.intelligence.cli")
+        runner = module.main
+    except (AttributeError, ImportError, ModuleNotFoundError) as exc:
+        print("Unable to load intelligence CLI component.", file=sys.stderr)
+        if isinstance(exc, ModuleNotFoundError) and exc.name:
+            print(f"Missing dependency: {exc.name}", file=sys.stderr)
+        return 1
+    return _result_code(runner(domain_args))
+
+
 def _print_backtest_help() -> None:
     print("usage: stock-analysis backtest <command> [options]")
     print()
@@ -215,6 +229,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _result_code(_run_debate(domain_args))
         if namespace == "research":
             return _result_code(_run_research(domain_args))
+        if namespace == "intelligence":
+            return _result_code(_run_intelligence(domain_args))
         return _result_code(_run_backtest(domain_args))
 
     parser = build_parser()

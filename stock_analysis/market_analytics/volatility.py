@@ -739,6 +739,7 @@ class VolatilityEngine:
     ) -> IVHistoryContext:
         def unavailable(reason: str) -> MetricResult[float]:
             return self._unavailable(as_of, provider, dataset, reason)
+
         if current.value is None:
             missing = unavailable("current IV is unavailable")
             return IVHistoryContext(

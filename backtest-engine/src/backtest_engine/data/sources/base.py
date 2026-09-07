@@ -25,6 +25,7 @@ import pandas as pd
 import requests
 
 from backtest_engine.config import Settings
+from backtest_engine.data.dates import day_after, utc_day
 
 SOURCE_YFINANCE: Final[str] = "yfinance"
 SOURCE_STOOQ: Final[str] = "stooq"
@@ -84,9 +85,9 @@ class CsvSource(Source):
         for column in required - {"timestamp"}:
             frame[column] = pd.to_numeric(frame[column], errors="coerce")
         if start:
-            frame = frame[frame["timestamp"] >= pd.Timestamp(start, tz="UTC")]
+            frame = frame[frame["timestamp"] >= utc_day(start)]
         if end:
-            frame = frame[frame["timestamp"] <= pd.Timestamp(end, tz="UTC")]
+            frame = frame[frame["timestamp"] < utc_day(end) + pd.Timedelta(days=1)]
         return frame
 
 
@@ -96,10 +97,10 @@ class CsvSource(Source):
 
 
 class YFinanceSource(Source):
-    """yfinance adapter. Uses back-adjusted prices; persists corp-action facts.
+    """yfinance adapter retaining raw OHLC and corporate-action facts.
 
-    yfinance auto-adjusts splits + dividends when auto_adjust=False returns raw;
-    we explicitly request auto_adjust=False so adj_* are available alongside raw.
+    ``auto_adjust=False`` requests raw OHLC and adjusted-close/action facts. The
+    normalizer derives adjusted OHLC from those source values.
     """
 
     name = SOURCE_YFINANCE
@@ -119,7 +120,12 @@ class YFinanceSource(Source):
             try:
                 # auto_adjust=False so we get both raw OHLV and adj OHLC in one shot
                 t = self._yf.Ticker(symbol)
-                df = t.history(start=start, end=end, auto_adjust=False, actions=True)
+                df = t.history(
+                    start=start,
+                    end=day_after(end) if end else None,
+                    auto_adjust=False,
+                    actions=True,
+                )
                 if df is None or df.empty:
                     return pd.DataFrame(columns=RAW_FILE_COLUMNS)
                 return self._normalize(df)

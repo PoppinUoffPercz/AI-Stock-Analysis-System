@@ -19,7 +19,16 @@ stock-analysis research run --bot scion
 ```
 
 From the repository root, install the shared root package first, then this package:
-`python -m pip install -e .` followed by `python -m pip install -e ./scion-omaha-bots`.
+
+```powershell
+python -m pip install -e .
+python -m pip install -e ./scion-omaha-bots
+# Only when OpenBB research adapters are required:
+python -m pip install -e "./scion-omaha-bots[research]"
+```
+
+`pyproject.toml` is the sole dependency declaration; there is no separate
+requirements file to keep in sync.
 The historical `python main.py` and `python buffett_main.py` commands remain
 supported when run from this directory.
 
@@ -28,7 +37,7 @@ supported when run from this directory.
 ```
 # Shared
 notify.py                  WhatsApp alert bridge (via zappy-mcp)
-requirements.txt           Python dependencies
+pyproject.toml             Package metadata and dependency declarations
 
 # Scion-Bot (Burry — Swing Trading)
 screener.py                Market scanner — finds "roadkill" near 52W lows

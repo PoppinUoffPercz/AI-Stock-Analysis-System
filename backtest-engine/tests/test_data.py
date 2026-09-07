@@ -13,7 +13,7 @@ import pytest
 
 from backtest_engine.data.clean import CleanError, validate_clean
 from backtest_engine.data.ingest import _write_boundary, ingest_symbol
-from backtest_engine.data.sources.base import YFinanceSource
+from backtest_engine.data.sources.base import CsvSource, StooqSource, YFinanceSource
 from backtest_engine.data.store import CLEAN_COLUMNS, clean_path, read_clean, write_clean
 from backtest_engine.data.universe import Universe, write_spx_sample
 
@@ -150,6 +150,31 @@ def test_read_clean_round_trip(tmp_path):
     assert list(got.columns) == list(CLEAN_COLUMNS)
     # Source tag persisted
     assert (got["source"] == "test").all()
+
+
+def test_read_clean_includes_intraday_rows_on_end_date(tmp_path):
+    raw = _raw_frame(n=2)
+    raw.loc[0, "timestamp"] = pd.Timestamp("2024-01-02T00:00:00Z")
+    raw.loc[1, "timestamp"] = pd.Timestamp("2024-01-02T15:30:00Z")
+    write_clean(raw, tmp_path / "clean", symbol="TEST", source="fixture")
+
+    got = read_clean(tmp_path / "clean", "TEST", end="2024-01-02")
+
+    assert got["timestamp"].tolist() == raw["timestamp"].tolist()
+
+
+def test_csv_source_includes_intraday_rows_on_end_date(tmp_path):
+    path = tmp_path / "bars.csv"
+    path.write_text(
+        "timestamp,open,high,low,close,volume\n"
+        "2024-01-02T15:30:00Z,10,11,9,10,100\n"
+        "2024-01-03T00:00:00Z,11,12,10,11,100\n",
+        encoding="utf-8",
+    )
+
+    got = CsvSource(path).fetch("TEST", start=None, end="2024-01-02")
+
+    assert got["timestamp"].tolist() == [pd.Timestamp("2024-01-02T15:30:00Z")]
 
 
 def test_read_clean_missing_symbol_returns_empty(tmp_path):
@@ -365,6 +390,70 @@ def test_validate_clean_rejects_nonfinite_adjusted_ohlc():
 
     with pytest.raises(CleanError, match="adjusted OHLC"):
         validate_clean(raw, source="test")
+
+
+@pytest.mark.parametrize("column", ["open", "high", "low", "close"])
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
+def test_validate_clean_rejects_nonfinite_raw_ohlc(column, value):
+    raw = _raw_frame()
+    raw.loc[0, column] = value
+
+    with pytest.raises(CleanError, match="raw OHLC"):
+        validate_clean(raw, source="fixture")
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("volume", np.inf, "volume"),
+        ("dividend", np.nan, "dividend"),
+        ("dividend", np.inf, "dividend"),
+        ("split_ratio", np.nan, "split_ratio"),
+        ("split_ratio", np.inf, "split_ratio"),
+    ],
+)
+def test_validate_clean_rejects_nonfinite_volume_and_actions(column, value, message):
+    raw = _raw_frame()
+    raw.loc[0, column] = value
+
+    with pytest.raises(CleanError, match=message):
+        validate_clean(raw, source="fixture")
+
+
+def test_yfinance_fetch_translates_inclusive_end_date():
+    calls: list[dict[str, object]] = []
+
+    class FakeTicker:
+        def __init__(self, symbol: str) -> None:
+            self.symbol = symbol
+
+        def history(self, **kwargs):
+            calls.append(kwargs)
+            return _yfinance_frame([100.0])
+
+    src = YFinanceSource.__new__(YFinanceSource)
+    from backtest_engine.config import Settings
+
+    src.s = Settings()
+    src._yf = type("_YF", (), {"Ticker": FakeTicker})
+
+    src.fetch("TEST", start="2024-01-01", end="2024-01-02")
+
+    assert calls == [
+        {
+            "start": "2024-01-01",
+            "end": "2024-01-03",
+            "auto_adjust": False,
+            "actions": True,
+        }
+    ]
+
+
+def test_stooq_date_params_keep_inclusive_end_date():
+    assert StooqSource._date_params("2024-01-01", "2024-01-02") == {
+        "d1": "20240101",
+        "d2": "20240102",
+    }
 
 
 # ---------------------------------------------------------------------------

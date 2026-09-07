@@ -17,7 +17,10 @@ from typing import Any
 class MetricStatus(StrEnum):
     OK = "ok"
     DEGRADED = "degraded"
+    PARTIAL = "partial"
     STALE = "stale"
+    INVALID = "invalid"
+    UNSUPPORTED = "unsupported"
     UNAVAILABLE = "unavailable"
 
 
@@ -142,6 +145,10 @@ class InstrumentSpec:
     price_precision: int = 2
     contract_multiplier: float = 100.0
     atr: float | None = None
+    instrument_id: str | None = None
+    asset_class: str = "equity"
+    currency: str = "USD"
+    exchange_timezone: str = "America/New_York"
 
     def __post_init__(self) -> None:
         if not self.symbol:
@@ -160,6 +167,16 @@ class InstrumentSpec:
             _require_finite(float(self.atr), "atr")
             if self.atr <= 0:
                 raise ValueError("atr must be positive")
+        if self.instrument_id is not None and not self.instrument_id:
+            raise ValueError("instrument_id must not be empty")
+        if not self.asset_class or not self.currency or not self.exchange_timezone:
+            raise ValueError("instrument identity metadata must not be empty")
+
+    @property
+    def stable_id(self) -> str:
+        return self.instrument_id or (
+            f"{self.asset_class}:{self.venue}:{self.symbol}:{self.currency}"
+        )
 
     def price_to_ticks(self, price: float) -> int:
         _require_finite(float(price), "price")

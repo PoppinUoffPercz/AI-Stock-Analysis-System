@@ -105,10 +105,15 @@ def _build_parser() -> argparse.ArgumentParser:
     i.add_argument("--source", choices=("csv", "yfinance", "stooq"), default="csv")
     i.add_argument("--input", type=Path, help="Local CSV input (required for --source csv)")
     i.add_argument("--symbol", required=True)
-    i.add_argument("--start")
-    i.add_argument("--end")
+    i.add_argument("--start", help="Inclusive start date (YYYY-MM-DD)")
+    i.add_argument("--end", help="Inclusive end date (YYYY-MM-DD)")
     i.add_argument("--data-root", type=Path)
     i.add_argument("--destination", type=Path, help="Alias for --data-root")
+    i.add_argument(
+        "--universe-root",
+        type=Path,
+        help="Universe metadata root for listing/delisting boundaries",
+    )
 
     c = sub.add_parser("compare", help="Compare explicit persisted run ids")
     c.add_argument("--run-id", action="append", required=True)
@@ -451,6 +456,12 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
         print("error: pass only one of --data-root or --destination", file=sys.stderr)
         return 1
     data_root = args.destination or args.data_root or settings.data_dir
+    if args.universe_root is not None:
+        universe_root = args.universe_root
+    elif args.destination is not None or args.data_root is not None:
+        universe_root = data_root / "universe"
+    else:
+        universe_root = settings.universe_dir
     try:
         rows, boundary = ingest_symbol(
             args.symbol,
@@ -458,7 +469,7 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
             start=args.start,
             end=args.end,
             clean_root=data_root / "clean",
-            universe_root=data_root / "universe",
+            universe_root=universe_root,
             cross_check=False,
             input_path=args.input,
         )

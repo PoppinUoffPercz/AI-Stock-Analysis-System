@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+from stock_analysis.persistence import atomic_write_text
 
 from backtest_engine.reproducibility import RunManifest, fallback_manifest
 from backtest_engine.strategy.result import BacktestResult, TradeRecord, validate_backtest_result
@@ -68,19 +69,8 @@ def persist_result(
         manifest = _write_manifest_once(manifest_path, manifest)
     result.manifest = manifest
     persisted_result.manifest = manifest
-    _atomic_write(path, encoded, prefix=".result.")
+    atomic_write_text(path, encoded)
     return path
-
-
-def _atomic_write(path: Path, encoded: str, *, prefix: str) -> None:
-    fd, temp_name = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=path.parent)
-    os.close(fd)
-    temp = Path(temp_name)
-    try:
-        temp.write_text(encoded, encoding="utf-8")
-        os.replace(temp, path)
-    finally:
-        temp.unlink(missing_ok=True)
 
 
 def _write_manifest_once(path: Path, manifest: RunManifest) -> RunManifest:

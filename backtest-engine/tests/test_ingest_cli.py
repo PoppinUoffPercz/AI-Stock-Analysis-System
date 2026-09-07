@@ -47,6 +47,34 @@ def test_cli_ingest_csv_writes_clean_data_readable_by_cli(tmp_path, capsys):
     assert (tmp_path / "market-data" / "universe" / "TEST_boundary.csv").exists()
 
 
+def test_cli_ingest_honors_explicit_universe_root(tmp_path, capsys):
+    source = tmp_path / "bars.csv"
+    _csv(source)
+    data_root = tmp_path / "market-data"
+    universe_root = tmp_path / "custom-universe"
+
+    rc = cli.main(
+        [
+            "ingest",
+            "--source",
+            "csv",
+            "--input",
+            str(source),
+            "--symbol",
+            "TEST",
+            "--data-root",
+            str(data_root),
+            "--universe-root",
+            str(universe_root),
+        ]
+    )
+
+    assert rc == 0
+    assert "Ingested 3 rows for TEST" in capsys.readouterr().out
+    assert (universe_root / "TEST_boundary.csv").exists()
+    assert not (data_root / "universe" / "TEST_boundary.csv").exists()
+
+
 def test_cli_ingest_rejects_malformed_csv_without_writing(tmp_path, capsys):
     source = tmp_path / "bad.csv"
     source.write_text("Date,Open,High,Low,Volume\n2024-01-02,10,12,9,100\n")

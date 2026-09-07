@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from hypothesis import given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from backtest_engine.execution.costs import (
@@ -114,6 +114,7 @@ def test_build_cost_funcs_rejects_unrepresentable_presets(name):
 # --- Hypothesis property tests --------------------------------------------
 
 
+@settings(suppress_health_check=[HealthCheck.too_slow])
 @given(
     shares=st.floats(min_value=0.0, max_value=1e6, allow_nan=False, allow_infinity=False),
     price=st.floats(min_value=1.0, max_value=10_000.0, allow_nan=False, allow_infinity=False),

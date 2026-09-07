@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from stock_analysis.artifacts import SCHEMA_VERSION, ArtifactRef, ArtifactStore
 from stock_analysis.persistence import atomic_write_text, process_lock
 
 from backtest_engine.reproducibility import RunManifest, canonical_json
@@ -33,6 +34,7 @@ class ExperimentIndex:
             "engine": manifest.stable.get("engine"),
             "params": manifest.stable.get("params", {}),
             "data_hash": manifest.stable.get("data", {}).get("content_sha256"),
+            "intelligence": manifest.stable.get("intelligence", {}),
             "artifacts": artifacts or {},
             "benchmark": benchmark,
         }
@@ -74,6 +76,31 @@ class ExperimentIndex:
             for item in self.filter(strategy=target.get("strategy"))
             if item.get("run_id") != run_id
         ]
+
+    def resolve_intelligence(self, run_id: str, store: ArtifactStore) -> dict[str, ArtifactRef]:
+        """Resolve the exact intelligence artifacts recorded for a historical run."""
+        record = self.get(run_id)
+        if "intelligence" not in record or not record["intelligence"]:
+            raise ValueError(f"run_id {run_id} has no recorded intelligence provenance")
+        raw = record["intelligence"]
+        if not isinstance(raw, dict):
+            raise ValueError(f"malformed intelligence references for run_id {run_id}")
+        resolved: dict[str, ArtifactRef] = {}
+        seen: set[tuple[str, str]] = set()
+        for role, value in raw.items():
+            if not isinstance(role, str) or not isinstance(value, dict):
+                raise ValueError(f"malformed intelligence reference for run_id {run_id}")
+            if value.get("schema_version") != SCHEMA_VERSION:
+                raise ValueError(f"stale intelligence reference {role} for run_id {run_id}")
+            kind, identity = value.get("kind"), value.get("identity")
+            if not isinstance(kind, str) or not isinstance(identity, str):
+                raise ValueError(f"malformed intelligence reference {role} for run_id {run_id}")
+            key = (kind, identity)
+            if key in seen:
+                raise ValueError(f"duplicate intelligence reference {kind}/{identity}")
+            seen.add(key)
+            resolved[role] = store.reference(kind, identity)
+        return resolved
 
     def _read_unlocked(self) -> list[dict[str, Any]]:
         if not self.path.exists():

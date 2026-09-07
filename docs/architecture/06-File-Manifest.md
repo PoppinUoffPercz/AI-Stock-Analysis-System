@@ -101,6 +101,6 @@ Every file in `./scion-omaha-bots\` and what it does.
 
 | File | Purpose |
 | :--- | :--- |
-| `requirements.txt` | Python dependencies: yfinance, pandas, numpy, tabulate, websockets, openbb, openbb-mcp-server |
+| `scion-omaha-bots/pyproject.toml` | Package dependencies; OpenBB research support is an optional extra. |
 | `README.md` | Old README — less comprehensive than this System Guide |
 | `anchored_context_summary.md` | (in vault Summaries/) — session state tracking |

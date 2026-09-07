@@ -128,6 +128,8 @@ def build_manifest(
     random_seed: int | None = None,
     relevant_args: Mapping[str, Any] | None = None,
     dataset_identity: Mapping[str, Any] | None = None,
+    intelligence_refs: Mapping[str, Any] | None = None,
+    execution_assumptions: Mapping[str, Any] | None = None,
 ) -> RunManifest:
     """Build the manifest after filtering, from exactly the bars sent to an adapter."""
     cost = get_preset(cost_model)
@@ -160,6 +162,8 @@ def build_manifest(
         "universe": universe_identity,
         "random_seed": random_seed,
         "args": dict(relevant_args or {}),
+        "intelligence": dict(intelligence_refs or {}),
+        "execution_assumptions": dict(execution_assumptions or {}),
         "code": _git_state(),
         "runtime": {
             "python": platform.python_version(),

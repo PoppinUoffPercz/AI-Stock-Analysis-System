@@ -174,8 +174,10 @@ def cmd_add(args):
         total_debt = info.get("totalDebt") or 0
         total_cash = info.get("totalCash") or 0
         intrinsic_equity = sum(pv) + (projected[-1] * (1 + terminal) / (discount - terminal)) / ((1 + discount) ** 10) + total_cash - total_debt
-        intrinsic = round(intrinsic_equity / shares, 2)
-        margin = round((intrinsic - entry) / intrinsic * 100, 1)
+        estimated_intrinsic = round(intrinsic_equity / shares, 2)
+        if estimated_intrinsic > 0:
+            intrinsic = estimated_intrinsic
+            margin = round((intrinsic - entry) / intrinsic * 100, 1)
 
     result = pm.open_position(
         symbol=args.symbol.upper(),
@@ -188,6 +190,9 @@ def cmd_add(args):
     if intrinsic:
         print(f"Estimated intrinsic value: ${intrinsic} | Margin of Safety: {margin}%")
     print(f"\n{pm.get_portfolio_summary()}")
+
+    if result.get("action") != "BOUGHT":
+        return
 
     if args.notify:
         notifier = ScionNotifier(recipient_id=args.recipient)
@@ -216,6 +221,9 @@ def cmd_trim(args):
                                reason=args.reason or "Portfolio rebalancing")
     print(f"\nPosition trimmed: {result}")
     print(f"\n{pm.get_portfolio_summary()}")
+
+    if result.get("action") != "TRIMMED":
+        return
 
     if args.notify:
         notifier = ScionNotifier(recipient_id=args.recipient)
